@@ -1,9 +1,9 @@
+import itertools
 import select
 try:
     import win32file
 except ImportError:
     win32file = None
-
 
 
 MODE_READ = 1
@@ -13,6 +13,9 @@ MODE_RW = MODE_READ | MODE_WRITE
 class BasePoller(object):
     def close(self):
         pass
+    @classmethod
+    def supported(cls):
+        return False
     def register(self, fileobj, mode = MODE_RW):
         raise NotImplementedError()
     def unregister(self, fileobj):
@@ -24,6 +27,9 @@ class SelectPoller(BasePoller):
     def __init__(self):
         self.rfiles = set()
         self.wfiles = set()
+    @classmethod
+    def supported(cls):
+        return hasattr(select, "select")
     def register(self, fileobj, mode = MODE_RW):
         self.rfiles.discard(fileobj)
         self.wfiles.discard(fileobj)
@@ -51,6 +57,10 @@ class SelectPoller(BasePoller):
 class UnixPoller(object):
     def __init__(self):
         self.poll = select.poll()
+
+    @classmethod
+    def supported(cls):
+        return hasattr(select, "poll")
     
     def register(self, fileobj, mode = MODE_RW):
         mask = 0
@@ -82,6 +92,10 @@ class EPoller(object):
     
     def close(self):
         self.epoll.close()
+
+    @classmethod
+    def supported(cls):
+        return hasattr(select, "epoll")
     
     def register(self, fileobj, mode = MODE_RW):
         fd = fileobj.fileno()
@@ -119,6 +133,11 @@ class KQueuePoller(BasePoller):
     def __init__(self):
         self.kqueue = select.kqueue()
         self.fdmap = {}
+
+    @classmethod
+    def supported(cls):
+        return hasattr(select, "kqueue")
+
     def close(self):
         self.kqueue.close()
     
@@ -157,13 +176,38 @@ class KQueuePoller(BasePoller):
                 out[e.ident] = MODE_WRITE
         return [(self.fdmap[fd], mode) for fd, mode in out.items()]
 
+
 class IOCPPoller(BasePoller):
-    pass
+    def __init__(self):
+        self.port = win32file.CreateIoCompletionPort(win32file.INVALID_HANDLE_VALUE, None, 0, 0)
+        self.keygen = itertools.count()
+    @classmethod
+    def supported(cls):
+        return hasattr(win32file, "CreateIoCompletionPort")
+    def close(self):
+        win32file.CloseHandle(self.port)
+    
+    def register(self, handle):
+        if hasattr(handle, "fileno"):
+            handle = handle.fileno()
+        key = self.keygen.next()
+        win32file.CreateIoCompletionPort(handle, self.port, key, 0)
+        return key
+    
+    def post(self):
+        win32file.PostQueuedCompletionStatus(self.port, numberOfbytes, completionKey, overlapped)
+    
+    def poll(self, timeout):
+        res = win32file.GetQueuedCompletionStatus(self.port, int(timeout * 1000))
+        return res
 
 
-
-
-
+for cls in [EPoller, KQueuePoller, IOCPPoller, UnixPoller, SelectPoller]:
+    if cls.supported():
+        DEFAULT_POLLER = cls
+        break
+else:
+    DEFAULT_POLLER = None
 
 
 
