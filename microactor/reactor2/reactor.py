@@ -9,7 +9,7 @@ class Reactor(object):
         self._processes = []
         self._active = False
     
-    def main(self):
+    def work(self):
         assert self._active
         self._active = True
         while self._active:
@@ -20,5 +20,7 @@ class Reactor(object):
             return
         self._active = False
         self._poller.close()
+    
+    
 
 

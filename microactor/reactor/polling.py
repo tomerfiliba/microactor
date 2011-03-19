@@ -183,7 +183,8 @@ class IOCPPoller(BasePoller):
         self.keygen = itertools.count()
     @classmethod
     def supported(cls):
-        return hasattr(win32file, "CreateIoCompletionPort")
+        #return hasattr(win32file, "CreateIoCompletionPort")
+        return False
     def close(self):
         win32file.CloseHandle(self.port)
     
@@ -194,20 +195,24 @@ class IOCPPoller(BasePoller):
         win32file.CreateIoCompletionPort(handle, self.port, key, 0)
         return key
     
+    def unregister(self, fileobj):
+        # not supported on windows
+        pass
+    
     def post(self):
-        win32file.PostQueuedCompletionStatus(self.port, numberOfbytes, completionKey, overlapped)
+        #win32file.PostQueuedCompletionStatus(self.port, numberOfbytes, completionKey, overlapped)
+        pass
     
     def poll(self, timeout):
         res = win32file.GetQueuedCompletionStatus(self.port, int(timeout * 1000))
         return res
 
 
+DEFAULT_POLLER = None
 for cls in [EPoller, KQueuePoller, IOCPPoller, UnixPoller, SelectPoller]:
     if cls.supported():
         DEFAULT_POLLER = cls
         break
-else:
-    DEFAULT_POLLER = None
 
 
 
