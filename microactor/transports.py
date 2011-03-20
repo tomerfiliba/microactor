@@ -1,6 +1,8 @@
 import socket
+import errno
 import os
 import weakref
+import sys
 try:
     from io import BytesIO
 except ImportError:
@@ -120,6 +122,30 @@ class Subsystem(object):
         self._init()
     def _init(self):
         pass
+
+class ConnectingSocketTransport(BaseTransport):
+    def __init__(self, reactor, sock, address, deferred):
+        BaseTransport.__init__(self, reactor)
+        self.sock = sock
+        self.address = address
+        self.deferred = deferred
+    
+    def fileno(self):
+        return self.sock.fileno()
+    
+    def on_write(self):
+        err = self.sock.connect_ex(self.address)
+        if err in (errno.EINPROGRESS, errno.EALREADY, errno.EWOULDBLOCK):
+            return
+        if err == errno.EINVAL and sys.platform == "win32":
+            return
+        if err in (0, errno.EISCONN):
+            trns = TcpStreamTransport(self.reactor, self.sock)
+            self.deferred.set(trns)
+            self.reactor.unregister_transport(self, "w")
+        else:
+            self.deferred.throw(socket.error(err, errno.errorcode[err]))
+        
 
 class TcpSubsystem(Subsystem):
     def connect(self, host, port):
