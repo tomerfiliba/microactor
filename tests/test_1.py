@@ -1,21 +1,36 @@
 import microactor
 
 
-@microactor.tasklet
-def echo_server(reactor):
-    listener = yield reactor.tcp.listen("localhost", 12233)
-    while True:
-        client = yield listener.on_accept()
-        reactor.call(echo_handler, client)
+cls = microactor.get_reactor_factory()
+reactor = cls()
 
-@microactor.tasklet
-def echo_handler(client):
+@microactor.reactive
+def main():
+    listener = yield reactor.tcp.listen(18812)
+    print "listener:", listener
+    reactor.call(client_main)
     while True:
-        blob = yield client.read(1000)
-        yield client.write(blob)
+        client = yield listener.accept()
+        print "accepted", client
+        reactor.call(serve_client, client)
+
+@microactor.reactive
+def client_main():
+    print "client started"
+    conn = yield reactor.tcp.connect("localhost", 18812)
+    print "client connected", conn
+    yield conn.write("hello world")
+    data = yield conn.read(10)
+    print "client got", repr(data)
+
+@microactor.reactive
+def serve_client(conn):
+    data = yield conn.read(10)
+    print "server got", repr(data)
+    yield conn.write("foobar!")
+    conn.close()
 
 
 if __name__ == "__main__":
-    microactor.main(echo_server)
-
-
+    reactor.call(main)
+    reactor.run()
