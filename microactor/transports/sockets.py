@@ -17,7 +17,13 @@ class TcpStreamTransport(StreamTransport):
         self.fileobj.shutdown(mode2)
     
     def _do_read(self, count):
-        return self.fileobj.recv(count)
+        try:
+            return self.fileobj.recv(count)
+        except socket.error as ex:
+            if ex.errno in (errno.ECONNRESET, errno.ECONNABORTED):
+                return ""  # EOF
+            else:
+                raise
     def _do_write(self, data):
         return self.fileobj.send(data)
 

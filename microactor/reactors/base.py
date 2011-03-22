@@ -144,7 +144,7 @@ class BaseReactor(object):
     # POSIX Signals
     #===========================================================================
     def _generic_signal_handler(self, signum, frame):
-        for handler in self._signal_handlers[signum]:
+        for handler in self._signal_handlers.get(signum, ()):
             if HAS_SIGCHLD and signum == signal.SIGCHLD:
                 # must be called from within this context
                 handler(signum)
@@ -165,25 +165,6 @@ class BaseReactor(object):
         if not self._signal_handlers[signum]:
             signal.signal(signum, signal.SIG_DFL)
             del self._signal_handlers[signum]    
-    
-    
-    
-    
-    
-    
-    
-    
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -1,4 +1,4 @@
-from microactor.utils import Deferred
+from microactor.utils import Deferred, reactive, rreturn
 from microactor.lib import Queue
 from io import BytesIO
 
@@ -45,39 +45,34 @@ class StreamTransport(BaseTransport):
     
     def read(self, count):
         dfr = Deferred()
-        self.read_queue.push((dfr, count, None))
+        self.read_queue.push((dfr, count))
         self.reactor.register_read(self)
         return dfr
 
-    def readn(self, count):
-        dfr = Deferred()
-        self.read_queue.push((dfr, count, ""))
-        self.reactor.register_read(self)
-        return dfr
+    @reactive
+    def readn(self, count, raise_on_eof = False):
+        buffer = []
+        while count > 0:
+            data = yield self.read(count)
+            if not data:
+                break
+            count -= len(data)
+            buffer.append(data)
+        data = "".join(buffer)
+        if raise_on_eof and count > 0:
+            raise EOFError()
+        rreturn(data)
     
     def on_read(self, hint):
         if hint < 0:
             hint = self.READ_SIZE
-        dfr, count, buffer = slot = self.read_queue.peek()
-        data = self._do_read(min(count, hint))
-        if buffer is None:
-            self.read_queue.pop()
-            if data:
-                dfr.set(data)
-            else:
-                dfr.throw(EOFError())
+        dfr, count = self.read_queue.pop()
+        try:
+            data = self._do_read(min(count, hint))
+        except Exception as ex:
+            dfr.throw(ex)
         else:
-            count -= len(data)
-            buffer += data
-            if not data or count <= 0:
-                self.read_queue.pop()
-                if buffer:
-                    dfr.set(buffer)
-                else:
-                    dfr.throw(EOFError())
-            else:
-                slot[1] = count
-                slot[2] = buffer
+            dfr.set(data)
         
         if not self.read_queue:
             self.reactor.unregister_read(self)
@@ -90,11 +85,15 @@ class StreamTransport(BaseTransport):
             hint = self.WRITE_SIZE
         dfr, stream, size = self.write_queue.pop()
         data = stream.read(hint)
-        written = self._do_write(data)
-        if written is not None:
-            stream.seek(written - len(data), 1)
-        if stream.tell() >= size:
-            dfr.set()
+        try:
+            written = self._do_write(data)
+        except Exception as ex:
+            dfr.throw(ex)
+        else:
+            if written is not None:
+                stream.seek(written - len(data), 1)
+            if stream.tell() >= size:
+                dfr.set()
         if not self.write_queue:
             self.reactor.unregister_write(self)
 

@@ -3,7 +3,7 @@ import microactor
 
 @microactor.reactive
 def main(reactor):
-    reactor.call_after(2, lambda job: reactor.stop())
+    reactor.call_after(5, lambda job: reactor.stop())
     
     listener = yield reactor.tcp.listen(18812)
     print "listener:", listener
@@ -26,13 +26,13 @@ def client_main(reactor):
 @microactor.reactive
 def serve_client(reactor, conn):
     print "servering client", conn
-    try:
-        while True:
-            data = yield conn.read(10)
-            print "server got", repr(data)
-            yield conn.write("foobar!")
-    except EOFError:
-        raise
+    while True:
+        data = yield conn.read(10)
+        if not data:
+            print "client disconnected"
+            break
+        print "server got", repr(data)
+        yield conn.write("foobar!")
     conn.close()
 
 
