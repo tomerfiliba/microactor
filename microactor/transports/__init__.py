@@ -3,3 +3,4 @@ from .events import Event
 from .sockets import (ConnectingSocketTransport, ListeningSocketTransport, 
                       TcpStreamTransport)
 from .files import FileTransport
+from .utils import BufferedTransport, BoundTransport

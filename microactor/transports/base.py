@@ -101,6 +101,17 @@ class StreamTransport(BaseTransport):
         return self.fileobj.write(count)
 
 
+class WrappedStreamTransport(StreamTransport):
+    def __init__(self, transport):
+        BaseTransport.__init__(self, transport.reactor)
+        self.transport = transport
+    def fileno(self):
+        # this is a slot method, doesn't go through __getattr__
+        return self.transport.fileno()
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self.transport, name)
 
 
 

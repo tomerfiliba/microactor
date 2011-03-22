@@ -1,5 +1,4 @@
 from types import GeneratorType
-from functools import partial
 
 
 class DeferredAlreadySet(Exception):
@@ -52,22 +51,25 @@ def parallel(func, *args, **kwargs):
 def reactive(func):
     def wrapper(*args, **kwargs):
         def continuation(is_exc, value):
-            try:
-                if is_exc:
-                    dfr = gen.throw(value)
+            while True:
+                try:
+                    if is_exc:
+                        dfr = gen.throw(value)
+                    else:
+                        dfr = gen.send(value)
+                except (GeneratorExit, StopIteration):
+                    retval.set()
+                except ReactiveReturn as ex:
+                    retval.set(ex.value)
+                except Exception as ex:
+                    retval.throw(ex)
                 else:
-                    dfr = gen.send(value)
-            except (GeneratorExit, StopIteration):
-                retval.set()
-            except ReactiveReturn as ex:
-                retval.set(ex.value)
-            except Exception as ex:
-                retval.throw(ex)
-            else:
-                if not isinstance(dfr, Deferred):
-                    retval.throw(ReactiveError("reactive function must yield a Deferred, not %s" % (type(dfr),)))
-                else:
-                    dfr.register(continuation)
+                    if not isinstance(dfr, Deferred):
+                        value = dfr
+                        continue
+                    else:
+                        dfr.register(continuation)
+                break
         
         retval = Deferred()
         try:
