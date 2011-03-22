@@ -70,11 +70,9 @@ class ConnectingSocketTransport(BaseTransport):
         self._attempt_connect()
     
     def _attempt_connect(self):
-        print "attempting connect"
         if self.deferred.is_set():
             return
         err = self.sock.connect_ex(self.addr)
-        print "err = ", err
         if err in (errno.EINPROGRESS, errno.EALREADY, errno.EWOULDBLOCK):
             return
         if err == errno.EINVAL and sys.platform == "win32":

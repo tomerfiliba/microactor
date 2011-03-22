@@ -10,6 +10,10 @@ from .jobs import SingleJob, PeriodicJob
 
 HAS_SIGCHLD = hasattr(signal, "SIGCHLD")
 
+
+class ReactorError(Exception):
+    pass
+
 class BaseReactor(object):
     MAX_POLLING_TIMEOUT = 0.5
 
@@ -22,6 +26,7 @@ class BaseReactor(object):
         self._signal_handlers = {}
         self._processes = []
         self._wakeup = Event(weakref.proxy(self))
+        self._active = False
         self.register_read(self._wakeup)
         if HAS_SIGCHLD:
             self._check_processes = False
@@ -38,18 +43,26 @@ class BaseReactor(object):
     #===========================================================================
     # Core
     #===========================================================================
-    def clock(self):
-        return time.time()
+    def run(self, func):
+        self.call(func, self)
+        self.start()
     
-    def run(self):
+    def start(self):
+        if self._active:
+            raise ReactorError("reactor already running")
         self._active = True
         while self._active:
             self._work()
         self._wakeup.reset()
     
     def stop(self):
+        if not self._active:
+            raise ReactorError("reactor not running")
         self._active = False
         self._wakeup.set()
+
+    def clock(self):
+        return time.time()
     
     def _work(self):
         now = self.clock()
@@ -85,7 +98,11 @@ class BaseReactor(object):
     
     def _handle_callbacks(self):
         for cb in self._callbacks:
-            cb()
+            try:
+                cb()
+            except Exception as ex:
+                print cb.func, cb.args
+                raise
         del self._callbacks[:]
 
     #===========================================================================

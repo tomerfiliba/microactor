@@ -1,4 +1,5 @@
 from types import GeneratorType
+from functools import partial
 
 
 class DeferredAlreadySet(Exception):
@@ -31,8 +32,22 @@ class ReactiveReturn(Exception):
     def __init__(self, value):
         self.value = value
 
+class ReactiveError(Exception):
+    pass
+
 def rreturn(value = None):
     raise ReactiveReturn(value)
+
+class Parallel(object):
+    def __init__(self, func, args, kwargs):
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+    def __call__(self):
+        self.func(*self.args, **self.kwargs)
+
+def parallel(func, *args, **kwargs):
+    return Parallel(func, args, kwargs)
 
 def reactive(func):
     def wrapper(*args, **kwargs):
@@ -49,7 +64,10 @@ def reactive(func):
             except Exception as ex:
                 retval.throw(ex)
             else:
-                dfr.register(continuation)
+                if not isinstance(dfr, Deferred):
+                    retval.throw(ReactiveError("reactive function must yield a Deferred, not %s" % (type(dfr),)))
+                else:
+                    dfr.register(continuation)
         
         retval = Deferred()
         try:
