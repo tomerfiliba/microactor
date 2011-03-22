@@ -154,7 +154,7 @@ class BaseReactor(object):
         self._wakeup.set()
     
     def register_signal(self, signum, callback):
-        if signum not in self._signal_handlers[signum]:
+        if signum not in self._signal_handlers:
             self._signal_handlers[signum] = [callback]
             signal.signal(signum, self._generic_signal_handler)
         else:

@@ -39,7 +39,7 @@ class EpollReactor(BaseReactor):
         
         for fd, flags in events:
             trns, _ = self._registered_with_epoll[fd]
-            if flags & select.EPOLLIN or flags & EPOLLPRI:
+            if flags & select.EPOLLIN or flags & select.EPOLLPRI:
                 self.call(trns.on_read, -1)
             if flags & select.EPOLLOUT:
                 self.call(trns.on_write, -1)
