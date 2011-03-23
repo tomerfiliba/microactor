@@ -24,10 +24,8 @@ frameworks such as Twisted. The benefits of this approach are numerous:
 * More composable code: it's easy to take "wrap" a "low-level" coroutine with
   a "higher-level" one. 
 
-For instance:
+For instance::
 
-.. code-block:: python
-  
     import microactor
     
     @microactor.reactive
