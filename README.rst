@@ -14,6 +14,8 @@ frameworks such as Twisted. The benefits of this approach are numerous:
 
 * Business logic is not spread over many places
 
+* Simpler, in-code state machines ("code flow is the state machine")
+
 * More compact code: No need for callbacks, factory classes, or multiple 
   inheritance schemes
   
@@ -21,7 +23,7 @@ frameworks such as Twisted. The benefits of this approach are numerous:
 
 * Better exception tracebacks and easier debugging (more "synchronous" mode of thinking)
 
-* More composable code: it's easy to take "wrap" a "low-level" coroutine with
+* More composable code: it's easy to take wrap a "low-level" coroutine with
   a "higher-level" one. 
 
 For instance::
