@@ -27,10 +27,11 @@ class SelectReactor(BaseReactor):
         for transports in [self._read_transports, self._write_transports]:
             bad = set()
             for trns in transports:
-                fds = (trns.fileno(),)
                 try:
+                    fds = (trns.fileno(),)
                     select.select(fds, fds, fds, 0)
                 except (select.error, EnvironmentError) as ex:
+                    print "pruning", trns
                     bad.add(trns)
                     self.call(trns.on_error, ex)
             transports -= bad

@@ -12,6 +12,10 @@ class TcpStreamTransport(StreamTransport):
         self.local_info = sock.getsockname()
         self.peer_info = sock.getpeername()
     
+    def close(self):
+        self.shutdown()
+        StreamTransport.close(self)
+    
     def shutdown(self, mode = "rw"):
         mode2 = {"r" : socket.SHUT_RD, "w" : socket.SHUT_WR, "rw" : socket.SHUT_RDWR}[mode]
         self.fileobj.shutdown(mode2)

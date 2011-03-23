@@ -1,31 +1,26 @@
 import microactor
-from microactor.protocols.http import HttpServer, HttpError
+from microactor.modules.http import HttpServer, HttpResponse, HttpError
 
 
 class MyHttpServer(HttpServer):
     @microactor.reactive
-    def do_get(self, req):
-        print req
-        data = "<http><body><h1>hello there</h1></body></http>"
-        yield req.conn.write("HTTP/1.1 200 OK\r\n")
-        yield req.conn.write("Content-Type: text/html; charset=utf-8\r\n")
-        yield req.conn.write("content-length: %s\r\n" % (len(data),))
-        yield req.conn.write("\r\n")
-        yield req.conn.write(data)
-        yield req.conn.flush()
-
-    @microactor.reactive
-    def do_post(self, req):
-        print req
-        raise HttpError(404, "Not Found")
-
-
+    def handle_get(self, req):
+        print "!! handle_get", req
+        if req.path != "/" :
+            raise HttpError(404, "Not Found")
+        resp = HttpResponse("<http><body><h1>hello there</h1></body></http>")
+        microactor.rreturn(resp)
 
 
 if __name__ == "__main__":
-    cls = microactor.get_reactor_factory()
-    reactor = cls()
-    reactor.call_after(50, lambda job: reactor.stop())
+    import signal
+    reactor = microactor.get_reactor()
+    @microactor.reactive
+    def shutdown(*args):
+        yield server.stop()
+        reactor.stop()
+    reactor.register_signal(signal.SIGINT, shutdown)
+    reactor.call_after(50, shutdown)
     server = MyHttpServer("/tmp", 8080)
     reactor.call(server.start, reactor)
     reactor.start()

@@ -19,10 +19,7 @@ class BufferedTransport(WrappedStreamTransport):
     @reactive
     def _fill_rbuf(self, count):
         while count > 0:
-            print "_fill_rbuf", count
             data = yield self.transport.read(count)
-            print "_fill_rbuf got", len(data)
-            print repr(data)
             if not data:
                 rreturn(True)
             self._rbuf += data
@@ -56,13 +53,10 @@ class BufferedTransport(WrappedStreamTransport):
         eof = False
         last_index = 0
         while True:
-            print "read_all last_index =", last_index
             ind = self._rbuf.find(pattern, last_index)
-            print "index =", ind
             if ind >= 0:
                 data = self._rbuf[:ind]
                 self._rbuf = self._rbuf[ind + len(pattern):]
-                print "returning", repr(data)
                 rreturn(data)
             else:
                 if eof:
@@ -73,7 +67,6 @@ class BufferedTransport(WrappedStreamTransport):
                         self._rbuf = ""
                         rreturn(data)
                 eof = yield self._fill_rbuf(self._rbufsize)
-                print "eof =", eof
                 last_index = len(self._rbuf) - len(pattern)
     
     def read_line(self):

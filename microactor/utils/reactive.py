@@ -77,7 +77,7 @@ def reactive(func):
         except (GeneratorExit, StopIteration):
             retval.set()
         except ReactiveReturn as ex:
-            retval.set(ex)
+            retval.set(ex.value)
         except Exception as ex:
             retval.throw(ex)
         else:
