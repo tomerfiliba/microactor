@@ -4,7 +4,7 @@ import signal
 from functools import partial
 from microactor.transports.events import Event
 from microactor.lib import MinHeap
-from microactor.subsystems import SUBSYSTEMS, init_subsystems
+from microactor.subsystems import init_subsystems, ALL_SUBSYSTEMS
 from .jobs import SingleJob, PeriodicJob
 
 
@@ -14,8 +14,12 @@ HAS_SIGCHLD = hasattr(signal, "SIGCHLD")
 class ReactorError(Exception):
     pass
 
+class ReactorExit(BaseException):
+    pass
+
 class BaseReactor(object):
     MAX_POLLING_TIMEOUT = 0.5
+    SUBSYSTEMS = ALL_SUBSYSTEMS
 
     def __init__(self):
         self._read_transports = set()
@@ -35,7 +39,7 @@ class BaseReactor(object):
                 self._check_processes = True
             self.register_signal(signal.SIGCHLD, sigchld_handler)
         
-        init_subsystems(weakref.proxy(self), SUBSYSTEMS)
+        init_subsystems(weakref.proxy(self), self.SUBSYSTEMS)
     
     @classmethod
     def supported(cls):
@@ -144,8 +148,16 @@ class BaseReactor(object):
     #===========================================================================
     # Jobs
     #===========================================================================
+    def call(self, func, *args, **kwargs):
+        self._callbacks.append(partial(func, *args, **kwargs))
+
+    #===========================================================================
+    # Jobs
+    #===========================================================================
+    
     def add_job(self, job):
         self._jobs.push((job.get_timestamp(self.clock()), job))
+
     def call_after(self, interval, func, *args, **kwargs):
         job = SingleJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock() + interval)
         self.add_job(job)

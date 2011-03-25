@@ -1,5 +1,6 @@
 from .base import WrappedStreamTransport
-from microactor.utils import reactive, rreturn
+from microactor.utils import reactive, rreturn, Deferred
+from microactor.lib import Queue
 
 
 
@@ -123,7 +124,31 @@ class BoundTransport(WrappedStreamTransport):
             self._wlength -= len(data)
 
 
+class Transactional(object):
+    def __init__(self, underlying):
+        self.queue = Queue()
+        self.underlying = underlying
+    
+    @reactive
+    def __enter__(self):
+        rreturn(self.begin())
 
+    @reactive
+    def __exit__(self):
+        self.end()
+    
+    def begin(self):
+        dfr = Deferred()
+        self.queue.push(dfr)
+        if len(self.queue) == 1:
+            dfr.set(self.underlying)
+        return dfr
+
+    def end(self):
+        self.queue.pop()
+        if self.queue:
+            dfr = self.queue.peek()
+            dfr.set(self.underlying)
 
 
 
