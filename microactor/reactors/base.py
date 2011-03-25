@@ -27,6 +27,7 @@ class BaseReactor(object):
         self._processes = []
         self._wakeup = Event(weakref.proxy(self))
         self._active = False
+        self._on_exit_callbacks = []
         self.register_read(self._wakeup)
         if HAS_SIGCHLD:
             self._check_processes = False
@@ -54,6 +55,9 @@ class BaseReactor(object):
         while self._active:
             self._work()
         self._wakeup.reset()
+        self._callbacks.extend(self._on_exit_callbacks)
+        del self._on_exit_callbacks[:]
+        self._handle_callbacks()
     
     def stop(self):
         if not self._active:
@@ -86,7 +90,7 @@ class BaseReactor(object):
             if rc is not None:
                 self.call(proc.on_terminated, rc)
                 self.call(self._processes.remove, proc)
-        
+    
     def _handle_jobs(self, now):
         while self._jobs:
             timestamp, job = self._jobs.peek()
@@ -125,12 +129,23 @@ class BaseReactor(object):
         self._changed_transports.add(transport)
 
     #===========================================================================
+    # Callbacks
+    #===========================================================================
+    def call(self, func, *args, **kwargs):
+        self._callbacks.append(partial(func, *args, **kwargs))
+    
+    def call_on_exit(self, func, *args, **kwargs):
+        self._on_exit_callbacks.append(partial(func, *args, **kwargs))
+    
+    def register_module(self, mod):
+        self.call(mod.start, self)
+        self.call_on_exit(mod.stop, self)
+
+    #===========================================================================
     # Jobs
     #===========================================================================
     def add_job(self, job):
         self._jobs.push((job.get_timestamp(self.clock()), job))
-    def call(self, func, *args, **kwargs):
-        self._callbacks.append(partial(func, *args, **kwargs))
     def call_after(self, interval, func, *args, **kwargs):
         job = SingleJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock() + interval)
         self.add_job(job)
