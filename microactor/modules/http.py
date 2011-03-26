@@ -1,6 +1,7 @@
 import microactor
 from .base import Module
 from microactor.transports import BufferedTransport, BoundTransport
+from urlparse import urlparse
 
 
 class HttpRequest(object):
@@ -44,8 +45,6 @@ class HttpResponse(object):
     
     @microactor.reactive
     def send(self, conn):
-        print "sending http respone", self.code, self.message
-
         if "content-length" not in self:
             try:
                 self["content-length"] = len(self.data)
@@ -68,13 +67,9 @@ class HttpError(Exception):
         self.resp = HttpResponse(data, code = code, message = msg, options = options)
     @microactor.reactive
     def send(self, conn):
-        print "in HttpError.send"
-        try:
-            if not self.resp.data:
-                self.resp.data = "<html><body>%s</body></html>" % (self.resp.message,)
-            yield self.resp.send(conn)
-        except Exception, ex:
-            print "oopsy", repr(ex)
+        if not self.resp.data:
+            self.resp.data = "<html><body>%s</body></html>" % (self.resp.message,)
+        yield self.resp.send(conn)
 
 
 class HttpServer(Module):
@@ -85,11 +80,9 @@ class HttpServer(Module):
     @microactor.reactive
     def start(self, reactor):
         listener = yield reactor.tcp.listen(self.port)
-        print "listener", listener
         self.active = True
         while self.active:
             conn = yield listener.accept()
-            print "accepted", conn
             reactor.call(self._handle_requests, conn)
         yield listener.close()
     
@@ -109,11 +102,7 @@ class HttpServer(Module):
 
     @microactor.reactive
     def _handle_one_request(self, conn):
-        print "in _handle_one_request", conn
-        
         raw_header = yield conn.read_until("\r\n\r\n", raise_on_eof = True)
-        print "got raw_header"
-        
         req = HttpRequest.from_header(raw_header)
         if "content-length" in req.options:
             length = int(req.options["content-length"])
@@ -123,8 +112,6 @@ class HttpServer(Module):
             req.conn = conn
             closed_on_finish = True
 
-        print "starting to serve", req
-        
         try:
             if req.command == "get":
                 resp = yield self.handle_get(req)
@@ -132,13 +119,10 @@ class HttpServer(Module):
                 resp = yield self.handle_post(req)
             else:
                 raise HttpError(400, "Bad Request")
-            print "got response", resp
             yield resp.send(conn)
         except HttpError as ex:
-            print "got HttpError", repr(ex)
             yield ex.send(conn)
         except Exception, ex:
-            print "got exception", ex
             ex2 = HttpError(500, "Server Error", data = str(ex))
             ex2.send(conn)
         finally:
@@ -152,6 +136,58 @@ class HttpServer(Module):
     @microactor.reactive
     def handle_post(self, req):
         raise NotImplementedError()
+
+class HttpSubsystem(object):
+    @microactor.reactive
+    def get(self, url, options = None):
+        if "://" in url:
+            proto, url = url.split("://", 1)
+        else:
+            proto = "http"
+        if "/" in url:
+            raw_host, url = url.split("/", 1)
+        else:
+            raw_host = url
+            url = "/"
+        if ":" in raw_host:
+            host, port = raw_host.split(":", 1)
+        else:
+            host = raw_host
+            port = 80
+        path = url
+        if "host" not in options:
+            options["host"] = raw_host
+        if "user-agent" not in options:
+            options["user-agent"] = "Mozilla/5.0"
+        if "accept" not in options:
+            options["accept"] = "application/xml,application/xhtml+xml,text/html,text/plain,*/*"
+        if "accept-charset" not in options:
+            options["accept-charset"] = "utf-8"
+        conn = yield reactor.tcp.connect(host, port)
+        conn = BufferedTransport(conn)
+        yield conn.write("GET %s HTTP/1.1\r\n" % (path,))
+        for k, v in options.items():
+            yield conn.write("%s: %s\r\n" % (k, v))
+        yield conn.write("\r\n")
+        yield conn.flush()
+
+
+
+
+"""
+GET /foobar/spam?x=5&y=6 HTTP/1.1
+Host: localhost:18888
+Connection: keep-alive
+User-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US) AppleWebKit/534.16 (KHTML, like Gecko) Chrome/10.0.648.204 Safari/534.16
+Accept: application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5
+Accept-Encoding: gzip,deflate,sdch
+"""
+
+
+
+
+
+
 
 
 

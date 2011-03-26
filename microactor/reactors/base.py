@@ -14,8 +14,9 @@ HAS_SIGCHLD = hasattr(signal, "SIGCHLD")
 class ReactorError(Exception):
     pass
 
-class ReactorExit(BaseException):
-    pass
+#class ReactorExit(BaseException):
+#    pass
+
 
 class BaseReactor(object):
     MAX_POLLING_TIMEOUT = 0.5
@@ -58,14 +59,14 @@ class BaseReactor(object):
         self._active = True
         while self._active:
             self._work()
-        self._wakeup.reset()
-        self._callbacks.extend(self._on_exit_callbacks)
-        del self._on_exit_callbacks[:]
         self._handle_callbacks()
+        self._wakeup.reset()
     
     def stop(self):
         if not self._active:
             raise ReactorError("reactor not running")
+        self._callbacks.extend(self._on_exit_callbacks)
+        del self._on_exit_callbacks[:]
         self._active = False
         self._wakeup.set()
 
@@ -105,13 +106,14 @@ class BaseReactor(object):
         return self.MAX_POLLING_TIMEOUT
     
     def _handle_callbacks(self):
-        for cb in self._callbacks:
+        callbacks = self._callbacks
+        self._callbacks = []
+        for cb in callbacks:
             try:
                 cb()
             except Exception as ex:
                 print cb.func, cb.args
                 raise
-        del self._callbacks[:]
 
     #===========================================================================
     # Transports
@@ -148,12 +150,6 @@ class BaseReactor(object):
     #===========================================================================
     # Jobs
     #===========================================================================
-    def call(self, func, *args, **kwargs):
-        self._callbacks.append(partial(func, *args, **kwargs))
-
-    #===========================================================================
-    # Jobs
-    #===========================================================================
     
     def add_job(self, job):
         self._jobs.push((job.get_timestamp(self.clock()), job))
@@ -162,6 +158,7 @@ class BaseReactor(object):
         job = SingleJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock() + interval)
         self.add_job(job)
         return job
+    
     def call_every(self, interval, func, *args, **kwargs):
         job = PeriodicJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock(), interval)
         self.add_job(job)
@@ -181,6 +178,7 @@ class BaseReactor(object):
         self._wakeup.set()
     
     def register_signal(self, signum, callback):
+        """callback signature: (signum)"""
         if signum not in self._signal_handlers:
             self._signal_handlers[signum] = [callback]
             signal.signal(signum, self._generic_signal_handler)

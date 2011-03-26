@@ -1,19 +1,11 @@
-import time
 import microactor
 
 
 @microactor.reactive
 def main(reactor):
-    print time.ctime(), "start"
-    reactor.call_after(10, lambda job: reactor.stop())
-    
-    def foo(job):
-        print time.ctime(), "foo"
-    
-    reactor.call_after(2, foo)
-    
-    yield reactor.threading.call(time.sleep, 5)
-    print time.ctime(), "done sleeping"
+    conn = yield reactor.tcp.connect("www.google.com", 80)
+    conn.
+    1/0
 
 
 if __name__ == "__main__":
