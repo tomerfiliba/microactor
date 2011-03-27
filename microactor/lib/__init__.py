@@ -1,12 +1,6 @@
-import time
 import heapq
 
 
-def clock():
-    return time.time()
-
-def singleton(cls):
-    return cls()
 
 class Queue(object):
     def __init__(self):
@@ -41,6 +35,42 @@ class MinHeap(object):
         return self._items[0]
     def __len__(self):
         return len(self._items)
+
+class istr(str):
+    def __new__(cls, obj):
+        s = str.__new__(cls, obj)
+        s._lower = str.lower(s)
+        s._hash = hash(s._lower)
+        return s
+    def lower(self):
+        return self._lower
+    def __hash__(self):
+        return self._hash
+    def __eq__(self, other):
+        return self._lower == other.lower()
+    def __ne__(self, other):
+        return self._lower != other.lower()
+    def __gt__(self, other):
+        return self._lower > other.lower()
+    def __ge__(self, other):
+        return self._lower >= other.lower()
+    def __lt__(self, other):
+        return self._lower < other.lower()
+    def __le__(self, other):
+        return self._lower <= other.lower()
+
+
+print istr("Hello") == istr("hEllo")
+print hash(istr("Hello")) == hash(istr("hEllo"))
+
+
+
+
+
+
+
+
+
 
 
 
