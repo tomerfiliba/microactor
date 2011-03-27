@@ -60,16 +60,6 @@ class istr(str):
         return self._lower <= other.lower()
 
 
-print istr("Hello") == istr("hEllo")
-print hash(istr("Hello")) == hash(istr("hEllo"))
-
-
-
-
-
-
-
-
 
 
 

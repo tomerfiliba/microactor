@@ -1,3 +1,6 @@
+import itertools
+import sys
+import traceback
 from types import GeneratorType
 
 
@@ -5,10 +8,15 @@ class DeferredAlreadySet(Exception):
     pass
 
 class Deferred(object):
+    ID_GENERATOR = itertools.count()
+    
     def __init__(self, value = NotImplemented, is_exc = False):
+        self.id = self.ID_GENERATOR.next()
         self.value = value
         self.is_exc = is_exc
         self._callbacks = []
+    def __repr__(self):
+        return "<Deferred %d, value = %r>" % (self.id, self.value)
     def is_set(self):
         return self.value is not NotImplemented
     def register(self, func):
@@ -62,6 +70,7 @@ def reactive(func):
                 except ReactiveReturn as ex:
                     retval.set(ex.value)
                 except Exception as ex:
+                    ex.__traceback__ = "".join(traceback.format_exception(*sys.exc_info()))
                     retval.throw(ex)
                 else:
                     if not isinstance(dfr, Deferred):
@@ -85,7 +94,13 @@ def reactive(func):
                 continuation(False, None)
             else:
                 retval.set(gen)
+        
+        def show_traceback(is_exc, value):
+            if is_exc:
+                print >>sys.stderr, value.__traceback__
+        retval.register(show_traceback)
         return retval
+    
     return wrapper
 
 

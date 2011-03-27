@@ -45,7 +45,7 @@ class HttpRequestChain(object):
         conn = yield reactor.tcp.connect(host, port)
         conn2 = BufferedTransport(conn)
         inst = cls(conn2, proto, hostinfo)
-        return inst, path
+        rreturn((inst, path))
     
     @reactive
     def close(self):
