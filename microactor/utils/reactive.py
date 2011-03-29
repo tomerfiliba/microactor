@@ -16,7 +16,7 @@ class Deferred(object):
         self.is_exc = is_exc
         self._callbacks = []
     def __repr__(self):
-        return "<Deferred %d, value = %r>" % (self.id, self.value)
+        return "<Deferred %d, value = %s>" % (self.id, repr(self.value) if self.value is not NotImplemented else "<not set>")
     def is_set(self):
         return self.value is not NotImplemented
     def register(self, func):
@@ -26,7 +26,8 @@ class Deferred(object):
             func(self.is_exc, self.value)
     def set(self, value = None, is_exc = False):
         if self.is_set():
-            raise DeferredAlreadySet()
+            return
+            #raise DeferredAlreadySet()
         self.is_exc = is_exc
         self.value = value
         for func in self._callbacks:

@@ -7,7 +7,7 @@ class Queue(object):
         self._rindex = 0
         self._items = []
     def _compact(self):
-        if len(self._items) / self._rindex > 2:
+        if len(self._items) / self._rindex < 2:
             return
         self._items = self._items[self._rindex:]
         self._rindex = 0
@@ -38,6 +38,8 @@ class MinHeap(object):
 
 class istr(str):
     def __new__(cls, obj):
+        if isinstance(obj, istr):
+            return obj
         s = str.__new__(cls, obj)
         s._lower = str.lower(s)
         s._hash = hash(s._lower)

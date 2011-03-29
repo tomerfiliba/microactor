@@ -154,15 +154,15 @@ class BaseReactor(object):
     def add_job(self, job):
         self._jobs.push((job.get_timestamp(self.clock()), job))
 
-    def call_after(self, interval, func, *args, **kwargs):
+    def schedule(self, interval, func, *args, **kwargs):
         job = SingleJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock() + interval)
         self.add_job(job)
         return job
     
-    def call_every(self, interval, func, *args, **kwargs):
-        job = PeriodicJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock(), interval)
-        self.add_job(job)
-        return job
+    #def call_every(self, interval, func, *args, **kwargs):
+    #    job = PeriodicJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock(), interval)
+    #    self.add_job(job)
+    #    return job
     
     #===========================================================================
     # POSIX Signals
