@@ -37,6 +37,20 @@ class BufferedTransport(WrappedStreamTransport):
         data = self._rbuf[:count]
         self._rbuf = self._rbuf[count:]
         rreturn(data)
+
+    @reactive
+    def read_exactly(self, count, raise_on_eof = False):
+        buffer = []
+        while count > 0:
+            data = yield self.read(count)
+            if not data:
+                break
+            count -= len(data)
+            buffer.append(data)
+        data = "".join(buffer)
+        if raise_on_eof and count > 0:
+            raise EOFError()
+        rreturn(data)
     
     @reactive
     def read_all(self, chunk = 16000):
@@ -70,8 +84,10 @@ class BufferedTransport(WrappedStreamTransport):
                 eof = yield self._fill_rbuf(self._rbufsize)
                 last_index = len(self._rbuf) - len(pattern)
     
+    @reactive
     def read_line(self):
-        return self.read_until("\n")
+        data = self.read_until("\n")
+        if data.endswith("\r")
     
     @reactive
     def _empty_wbuf(self):
@@ -90,10 +106,19 @@ class BufferedTransport(WrappedStreamTransport):
     
     
 class BoundTransport(WrappedStreamTransport):
-    def __init__(self, transport, read_length, write_length):
+    def __init__(self, transport, read_length, write_length, skip_on_close = True, close_underlying = True):
         WrappedStreamTransport.__init__(self, transport)
         self._rlength = read_length
         self._wlength = write_length
+        self.skip_on_close = skip_on_close
+        self.close_underlying = close_underlying
+    
+    @reactive
+    def close(self):
+        if self.skip_on_close:
+            yield self.skip()
+        if self.close_underlying:
+            yield self.transport.close()
     
     def remaining_read(self):
         return self._rlength
@@ -114,6 +139,19 @@ class BoundTransport(WrappedStreamTransport):
         rreturn(data)
 
     @reactive
+    def skip(self, count = -1):
+        if count < 0:
+            count = self._rlength
+        actually_read = 0
+        while count > 0:
+            data = yield self.read(count)
+            if not data:
+                break
+            actually_read += len(data)
+            count -= len(data)
+        rreturn(actually_read)
+
+    @reactive
     def write(self, data):
         if self._wlength is None:
             yield self.transport.write(data)
@@ -123,32 +161,6 @@ class BoundTransport(WrappedStreamTransport):
             yield self.transport.write(data)
             self._wlength -= len(data)
 
-
-class Transactional(object):
-    def __init__(self, underlying):
-        self.queue = Queue()
-        self.underlying = underlying
-    
-    @reactive
-    def __enter__(self):
-        rreturn(self.begin())
-
-    @reactive
-    def __exit__(self):
-        self.end()
-    
-    def begin(self):
-        dfr = Deferred()
-        self.queue.push(dfr)
-        if len(self.queue) == 1:
-            dfr.set(self.underlying)
-        return dfr
-
-    def end(self):
-        self.queue.pop()
-        if self.queue:
-            dfr = self.queue.peek()
-            dfr.set(self.underlying)
 
 
 

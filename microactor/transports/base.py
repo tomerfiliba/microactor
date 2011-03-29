@@ -49,20 +49,6 @@ class StreamTransport(BaseTransport):
         self.reactor.register_read(self)
         return dfr
 
-    @reactive
-    def readn(self, count, raise_on_eof = False):
-        buffer = []
-        while count > 0:
-            data = yield self.read(count)
-            if not data:
-                break
-            count -= len(data)
-            buffer.append(data)
-        data = "".join(buffer)
-        if raise_on_eof and count > 0:
-            raise EOFError()
-        rreturn(data)
-    
     def on_read(self, hint):
         if hint < 0:
             hint = self.READ_SIZE

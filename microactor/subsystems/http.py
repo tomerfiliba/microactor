@@ -4,18 +4,22 @@ from microactor.lib import istr
 from microactor.transports import BufferedTransport, BoundTransport
 
 
-
-class HttpResponse(object):
-    def __init__(self, proto, code, message, headers, conn2):
-        pass
-
+class CaseInsensitiveDict(dict):
+    def __init__(self, *args, **kwargs):
+        self.update(*args, **kwargs)
+    def __setitem__(self, name, value):
+        return dict.__setitem__(self, istr(name), value)
+    def update(self, *args, **kwargs):
+        d = dict(*args, **kwargs)
+        for k, v in d.items():
+            self[k] = v
 
 class HttpRequest(object):
-    def __init__(self, conn, proto, hostinfo):
+    def __init__(self, conn, hostinfo, path):
         self.conn = conn
         self.proto = proto
         self.hostinfo = hostinfo
-        self.options = {}
+        self.options = CaseInsensitiveDict()
         self["User-Agent"] = "Mozilla/5.0"
         self["Connection"] = "keep-alive"
         self["Accept"] = "application/xml,application/xhtml+xml,text/html,text/plain,*/*"
@@ -35,7 +39,7 @@ class HttpRequest(object):
         headers = {istr(k) : v for k, v in (l.split(":", 1) for l in lines)}
         if "content-length" in headers:
             conn2 = BoundTransport(self.conn, int(headers["content-length"]), None)
-        return HttpResponse(proto, code, message, headers, conn2)
+        rreturn(HttpResponse(proto, code, message, headers, conn2))
     
     @reactive
     def get(self, path, options = None):
@@ -76,7 +80,6 @@ class HttpRequestChain(object):
     @reactive
     @classmethod
     def from_url(cls, reactor, url):
-        cls(url)
         if "://" in url:
             proto, url = url.split("://", 1)
         else:
@@ -103,10 +106,38 @@ class HttpRequestChain(object):
 class HttpSubsystem(Subsystem):
     NAME = "http"
     
+    def _init(self):
+        self._sessions = {}
+    
+    @classmethod
+    def _parse_url(cls, url):
+        if "://" in url:
+            scheme, url = url.split("://", 1)
+        else:
+            scheme = "http"
+        if "/" in url:
+            hostinfo, url = url.split("/", 1)
+        else:
+            hostinfo = url
+        if ":" in hostinfo:
+            host, port = hostinfo.split(":", 1)
+        else:
+            host = hostinfo
+            port = 80
+        path = url.strip()
+        if not path:
+            path = "/"
+        return scheme, hostinfo, host, port, path
+    
     @reactive
     def get(self, url, options = None):
-        req, path = HttpRequestChain.from_url(url)
-        yield req.get(path)
+        scheme, hostinfo, host, port, path = self._parse_url(url)
+        key = (scheme, hostinfo)
+        if key not in self._sessions:
+            self._sessions[key] = yield self.reactor.tcp.connect(host, port)
+        conn = self._sessions[key]
+        rreturn(HttpRequest(conn, hostinfo, path, options))
+            
 
 
 

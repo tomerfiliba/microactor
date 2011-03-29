@@ -1,5 +1,5 @@
-import itertools
 import sys
+import itertools
 import traceback
 from types import GeneratorType
 
@@ -14,26 +14,43 @@ class Deferred(object):
         self.id = self.ID_GENERATOR.next()
         self.value = value
         self.is_exc = is_exc
+        self.cancelled = False
         self._callbacks = []
     def __repr__(self):
-        return "<Deferred %d, value = %s>" % (self.id, repr(self.value) if self.value is not NotImplemented else "<not set>")
+        val = "value = %r" % (self.value,) if self.value is not NotImplemented else "pending"
+        return "<Deferred %d, %s>" % (self.id, val)
     def is_set(self):
         return self.value is not NotImplemented
     def register(self, func):
+        if self.cancelled:
+            return
         if self.value is NotImplemented:
             self._callbacks.append(func)
         else:
             func(self.is_exc, self.value)
     def set(self, value = None, is_exc = False):
-        if self.is_set():
+        if self.cancelled:
             return
-            #raise DeferredAlreadySet()
+        if self.is_set():
+            raise DeferredAlreadySet()
         self.is_exc = is_exc
         self.value = value
         for func in self._callbacks:
             func(is_exc, value)
-    def throw(self, exc):
+    def throw(self, exc, with_traceback = True):
+        if with_traceback:
+            tbtext = "".join(traceback.format_exception(*sys.exc_info()))
+            if not hasattr(exc, "_inner_tb"):
+                exc._inner_tb = [tbtext]
+            else:
+                exc._inner_tb.append(tbtext)
         self.set(exc, True)
+    def cancel(self, exc = None):
+        if self.cancelled:
+            return
+        if exc is not None:
+            self.throw(exc)
+        self.cancelled = True
 
 
 class ReactiveReturn(Exception):
@@ -46,16 +63,18 @@ class ReactiveError(Exception):
 def rreturn(value = None):
     raise ReactiveReturn(value)
 
-class Parallel(object):
-    def __init__(self, func, args, kwargs):
-        self.func = func
-        self.args = args
-        self.kwargs = kwargs
-    def __call__(self):
-        self.func(*self.args, **self.kwargs)
+class TimedOut(Exception):
+    pass
 
-def parallel(func, *args, **kwargs):
-    return Parallel(func, args, kwargs)
+def timed(reactor, timeout, dfr):
+    def cancel(job):
+        if not dfr.is_set():
+            dfr.register(lambda *args: dfr.cancel())
+            reactor.call(dfr.throw, TimedOut())
+    reactor.schedule(timeout, cancel)
+
+def parallel(reactor, func, *args, **kwargs):
+    return reactor.call(func, args, kwargs)
 
 def reactive(func):
     def wrapper(*args, **kwargs):
@@ -71,7 +90,6 @@ def reactive(func):
                 except ReactiveReturn as ex:
                     retval.set(ex.value)
                 except Exception as ex:
-                    ex.__traceback__ = "".join(traceback.format_exception(*sys.exc_info()))
                     retval.throw(ex)
                 else:
                     if not isinstance(dfr, Deferred):
@@ -96,23 +114,14 @@ def reactive(func):
             else:
                 retval.set(gen)
         
-        def show_traceback(is_exc, value):
+        def print_traceback(is_exc, value):
             if is_exc:
-                print >>sys.stderr, value.__traceback__
-        retval.register(show_traceback)
+                for tb in getattr(value, "_inner_tb", ()):
+                    print >>sys.stderr, tb + "\n"
+        retval.register(print_traceback)
         return retval
     
     return wrapper
-
-
-
-
-
-
-
-
-
-
 
 
 

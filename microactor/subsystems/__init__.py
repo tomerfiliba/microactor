@@ -6,6 +6,6 @@ from .stdio import StdioSubsystem
 from .http import HttpSubsystem
 
 
-ALL_SUBSYSTEMS = Subsystem.__subclasses__()
+#ALL_SUBSYSTEMS = Subsystem.__subclasses__()
 
 

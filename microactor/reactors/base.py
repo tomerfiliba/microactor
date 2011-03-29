@@ -4,47 +4,40 @@ import signal
 from functools import partial
 from microactor.transports.events import Event
 from microactor.lib import MinHeap
-from microactor.subsystems import init_subsystems, ALL_SUBSYSTEMS
-from .jobs import SingleJob, PeriodicJob
-
-
-HAS_SIGCHLD = hasattr(signal, "SIGCHLD")
+#from microactor.subsystems import 
 
 
 class ReactorError(Exception):
     pass
 
-#class ReactorExit(BaseException):
-#    pass
-
 
 class BaseReactor(object):
     MAX_POLLING_TIMEOUT = 0.5
-    SUBSYSTEMS = ALL_SUBSYSTEMS
+    #SUBSYSTEMS = ALL_SUBSYSTEMS
 
     def __init__(self):
         self._read_transports = set()
         self._write_transports = set()
         self._changed_transports = set()
         self._callbacks = []
+        self._on_exit_callbacks = []
         self._jobs = MinHeap()
         self._signal_handlers = {}
         self._processes = []
         self._wakeup = Event(weakref.proxy(self))
         self._active = False
-        self._on_exit_callbacks = []
         self.register_read(self._wakeup)
-        if HAS_SIGCHLD:
-            self._check_processes = False
-            def sigchld_handler(sig):
-                self._check_processes = True
-            self.register_signal(signal.SIGCHLD, sigchld_handler)
-        
-        init_subsystems(weakref.proxy(self), self.SUBSYSTEMS)
     
     @classmethod
     def supported(cls):
         return False
+
+    def install_subsystem(self, factory):
+        for subsys in factory.DEPENDENCIES:
+            self.install_subsystem(subsys)
+        inst = factory(weakref.proxy(self))
+        
+        setattr(self, factory.NAME, inst)
     
     #===========================================================================
     # Core
@@ -70,32 +63,16 @@ class BaseReactor(object):
         self._active = False
         self._wakeup.set()
 
-    def clock(self):
-        return time.time()
-    
     def _work(self):
-        now = self.clock()
+        now = time.time()
         timeout = self._handle_jobs(now)
         self._handle_transports(min(timeout, self.MAX_POLLING_TIMEOUT))
         self._changed_transports.clear()
-        self._handle_processes()
         self._handle_callbacks()
     
     def _handle_transports(self, timeout):
         raise NotImplementedError()
 
-    def _handle_processes(self):
-        if HAS_SIGCHLD:
-            if self._check_processes:
-                self._check_processes = False
-            else:
-                return
-        for proc in self._processes:
-            rc = proc.poll()
-            if rc is not None:
-                self.call(proc.on_terminated, rc)
-                self.call(self._processes.remove, proc)
-    
     def _handle_jobs(self, now):
         while self._jobs:
             timestamp, job = self._jobs.peek()
@@ -152,15 +129,15 @@ class BaseReactor(object):
     #===========================================================================
     
     def add_job(self, job):
-        self._jobs.push((job.get_timestamp(self.clock()), job))
+        self._jobs.push((job.get_timestamp(time.time()), job))
 
     def schedule(self, interval, func, *args, **kwargs):
-        job = SingleJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock() + interval)
+        job = SingleJob(weakref.proxy(self), partial(func, *args, **kwargs), time.time() + interval)
         self.add_job(job)
         return job
     
     #def call_every(self, interval, func, *args, **kwargs):
-    #    job = PeriodicJob(weakref.proxy(self), partial(func, *args, **kwargs), self.clock(), interval)
+    #    job = PeriodicJob(weakref.proxy(self), partial(func, *args, **kwargs), time.time(), interval)
     #    self.add_job(job)
     #    return job
     
@@ -169,8 +146,8 @@ class BaseReactor(object):
     #===========================================================================
     def _generic_signal_handler(self, signum, frame):
         for handler in self._signal_handlers.get(signum, ()):
-            if HAS_SIGCHLD and signum == signal.SIGCHLD:
-                # must be called from within this context
+            if signum == getattr(signal, "SIGCHLD", NotImplemented):
+                # must be called from within the context of the signal handler
                 handler(signum)
             else:
                 # defer

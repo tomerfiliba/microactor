@@ -18,6 +18,8 @@ class ThreadingSubsystem(Subsystem):
                 dfr.throw(ex)
             else:
                 dfr.set(res)
+            finally:
+                self.threads.discard(thd)
         thd = threading.Thread(target = wrapper)
         self.threads.add(thd)
         thd.start()
