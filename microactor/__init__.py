@@ -1,7 +1,4 @@
-from .reactors import get_reactor_factory
+from .reactors import get_reactor_factory, get_reactor
 from .utils import reactive, Deferred, rreturn
 
-
-def get_reactor():
-    return get_reactor_factory()()
 

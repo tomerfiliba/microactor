@@ -4,7 +4,6 @@ import signal
 from functools import partial
 from microactor.transports.events import Event
 from microactor.lib import MinHeap
-from microactor.subsystems import ALL_SUBSYSTEMS, init_subsystems
 
 
 class ReactorError(Exception):
@@ -14,7 +13,7 @@ class ReactorError(Exception):
 class BaseReactor(object):
     MAX_POLLING_TIMEOUT = 0.5
 
-    def __init__(self, subsystems = ALL_SUBSYSTEMS):
+    def __init__(self):
         self._read_transports = set()
         self._write_transports = set()
         self._changed_transports = set()
@@ -26,19 +25,11 @@ class BaseReactor(object):
         self._wakeup = Event(weakref.proxy(self))
         self._active = False
         self.register_read(self._wakeup)
-        
-        init_subsystems(weakref.proxy(self), subsystems)
     
     @classmethod
     def supported(cls):
         return False
 
-    #def install_subsystem(self, factory):
-    #    for subsys in factory.DEPENDENCIES:
-    #        self.install_subsystem(subsys)
-    #    inst = factory(weakref.proxy(self))
-    #    setattr(self, factory.NAME, inst)
-    
     #===========================================================================
     # Core
     #===========================================================================
@@ -148,7 +139,7 @@ class BaseReactor(object):
         self._signal_handlers[signum].remove(callback)
         if not self._signal_handlers[signum]:
             signal.signal(signum, signal.SIG_DFL)
-            del self._signal_handlers[signum]    
+            del self._signal_handlers[signum]
 
 
 
