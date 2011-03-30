@@ -1,8 +1,35 @@
-from .base import WrappedStreamTransport
-from microactor.utils import reactive, rreturn, Deferred
-from microactor.lib import Queue
+from .base import StreamTransport
+from microactor.utils import reactive, rreturn
 
 
+class WrappedStreamTransport(StreamTransport):
+    __slots__ = ["transport"]
+    
+    def __init__(self, transport):
+        StreamTransport.__init__(self, transport.reactor, None)
+        self.transport = transport
+    
+    def close(self):
+        return self.transport.close()
+    def fileno(self):
+        return self.transport.fileno()
+    def write(self, data):
+        return self.transport.write(data)
+    def read(self, count):
+        return self.transport.read(count)
+
+    #def __getattr__(self, name):
+    #    if name.startswith("_"):
+    #        raise AttributeError(name)
+    #    return getattr(self.transport, name)
+    
+    def on_read(self, hint):
+        raise AssertionError("cannot active on_read")
+    def on_write(self, hint):
+        raise AssertionError("cannot active on_write")
+    def on_error(self, hint):
+        raise AssertionError("cannot active on_error")
+    
 
 class BufferedTransport(WrappedStreamTransport):
     def __init__(self, transport, read_buffer_size = 16000, write_buffer_size = 16000):
@@ -31,6 +58,9 @@ class BufferedTransport(WrappedStreamTransport):
     
     @reactive
     def read(self, count):
+        if count < 0:
+            data = yield self.read_all()
+            rreturn(data)
         if count > len(self._rbuf):
             yield self._fill_rbuf(self._read_buffer_size - len(self._rbuf))
 
@@ -39,8 +69,9 @@ class BufferedTransport(WrappedStreamTransport):
         rreturn(data)
 
     @reactive
-    def read_exactly(self, count, raise_on_eof = False):
+    def read_exactly(self, count, raise_on_eof = True):
         buffer = []
+        orig_count = count
         while count > 0:
             data = yield self.read(count)
             if not data:
@@ -49,7 +80,7 @@ class BufferedTransport(WrappedStreamTransport):
             buffer.append(data)
         data = "".join(buffer)
         if raise_on_eof and count > 0:
-            raise EOFError()
+            raise EOFError("requested %r bytes, got %r" % (orig_count, len(data)), data)
         rreturn(data)
     
     @reactive
@@ -87,24 +118,24 @@ class BufferedTransport(WrappedStreamTransport):
     @reactive
     def read_line(self):
         data = self.read_until("\n")
-        if data.endswith("\r")
-    
-    @reactive
-    def _empty_wbuf(self):
-        yield self.transport.write(self._wbuf)
-        self._wbuf = ""
+        if data.endswith("\r"):
+            # discard CR in CR+LF
+            data = data[:-1]
+        rreturn(data)
     
     @reactive
     def flush(self):
-        yield self._empty_wbuf()
+        data = self._wbuf
+        self._wbuf = ""
+        yield self.transport.write(data)
     
     @reactive
     def write(self, data):
         self._wbuf += data
         if len(self._wbuf) > self._wbufsize:
-            yield self._empty_wbuf()
-    
-    
+            yield self.flush()
+
+
 class BoundTransport(WrappedStreamTransport):
     def __init__(self, transport, read_length, write_length, skip_on_close = True, close_underlying = True):
         WrappedStreamTransport.__init__(self, transport)

@@ -1,11 +1,11 @@
 from .base import Subsystem, init_subsystems
-from .tcp import TcpSubsystem
+from .jobs import JobSubsystem
+from .net import TcpSubsystem, UdpSubsystem, DnsSubsystem
 from .files import FilesSubsystem
-from .threads import ThreadingSubsystem
-from .stdio import StdioSubsystem
+from .processing import ProcessSubsystem, ThreadingSubsystem
 from .http import HttpSubsystem
 
 
-#ALL_SUBSYSTEMS = Subsystem.__subclasses__()
+ALL_SUBSYSTEMS = Subsystem.__subclasses__()
 
 

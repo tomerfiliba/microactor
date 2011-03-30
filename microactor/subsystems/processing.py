@@ -1,20 +1,25 @@
+import os
+import signal
 import subprocess
+import threading
 from microactor.subsystems.base import Subsystem
 from microactor.utils import Deferred, reactive, rreturn
 from microactor.transports import PipeTransport, BufferedTransport
-import signal
-import os
 
 
 class Process(object):
-    def __init__(self, reactor, proc):
+    def __init__(self, reactor, proc, cmdline):
         self.reactor = reactor
+        self.cmdline = cmdline
         self._proc = proc
         self.stdin = BufferedTransport(PipeTransport(reactor, proc.stdin, "w"))
         self.stdout = BufferedTransport(PipeTransport(reactor, proc.stdout, "r"))
         self.stderr = BufferedTransport(PipeTransport(reactor, proc.stderr, "r"))
         self.pid = proc.pid
         self.waiters_queue = []
+    
+    def __repr__(self):
+        return "<Process %r: %r>" % (self.pid, self.cmdline)
     
     def on_termination(self):
         rc = self.returncode
@@ -47,18 +52,28 @@ class Process(object):
 
 class ProcessSubsystem(Subsystem):
     NAME = "proc"
+    DEPENDS = ["jobs"]
+    POLL_INTERVAL = 0.2
     
     def _init(self):
         self.processes = {}
+        self._handler_installed = False
+    
+    def _install_child_handler(self):
+        if self._handler_installed:
+            return
         if hasattr(signal, "SIGCHLD"):
             self.reactor.register_signal(signal.SIGCHLD, self._collect_children)
         else:
-            self.reactor.schedule_repeating(0.2, self._windows_check_children)
+            # windows doesn't have sigchld, so let's just poll the process list
+            # every so often
+            self.reactor.jobs.schedule_every(self.POLL_INTERVAL, self._windows_check_children)
+        self._handler_installed = True
     
     def _collect_children(self, signum):
         try:
             while True:
-                pid, dummy = os.waitpid(-1, os.WNOHANG)
+                pid, _ = os.waitpid(-1, os.WNOHANG)
                 if pid <= 0:
                     break
                 proc = self.processes.pop(pid, None)
@@ -68,7 +83,7 @@ class ProcessSubsystem(Subsystem):
         except OSError:
             pass
     
-    def _windows_check_children(self, job):
+    def _windows_check_children(self):
         removed = []
         for pid, proc in self.processes.items():
             if not proc.is_alive():
@@ -76,14 +91,22 @@ class ProcessSubsystem(Subsystem):
                 removed.append(pid)
         for pid in removed:
             self.processes.pop(pid, None)
+        if not self.processes:
+            self._handler_installed = False
+            return False # stop repeating job
     
     def spawn(self, args, cwd = None, env = None):
         def spawner():
-            p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE,
-                stderr = subprocess.PIPE, cwd = cwd, env = env)
-            proc = Process(self.reactor, p)
-            self.processes[proc.pid] = proc
-            dfr.set()
+            try:
+                p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE,
+                    stderr = subprocess.PIPE, cwd = cwd, env = env)
+            except Exception as ex:
+                dfr.throw(ex)
+            else:
+                proc = Process(self.reactor, p, args)
+                self.processes[proc.pid] = proc
+                dfr.set(proc)
+        self._install_child_handler()
         dfr = Deferred()
         self.reactor.call(spawner)
         return dfr
@@ -121,11 +144,27 @@ class ProcessSubsystem(Subsystem):
             rreturn((rc, stdout_data, stderr_data))
 
 
-
-
-
-
-
+class ThreadingSubsystem(Subsystem):
+    NAME = "threading"
+    
+    def _init(self):
+        self.threads = set()
+    
+    def call(self, func, *args, **kwargs):
+        dfr = Deferred()
+        def wrapper():
+            try:
+                res = func(*args, **kwargs)
+            except Exception as ex:
+                dfr.throw(ex)
+            else:
+                dfr.set(res)
+            finally:
+                self.threads.discard(thd)
+        thd = threading.Thread(target = wrapper)
+        self.threads.add(thd)
+        thd.start()
+        return dfr
 
 
 

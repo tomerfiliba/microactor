@@ -1,9 +1,10 @@
-from microactor.utils import Deferred, reactive, rreturn
+from microactor.utils import Deferred
 from microactor.lib import Queue
 from io import BytesIO
 
 
 class BaseTransport(object):
+    __slots__ = ["reactor"]
     def __init__(self, reactor):
         self.reactor = reactor
     def _unregister(self):
@@ -25,6 +26,7 @@ class BaseTransport(object):
 class StreamTransport(BaseTransport):
     WRITE_SIZE = 16000
     READ_SIZE = 16000
+    __slots__ = ["fileobj", "write_queue", "read_queue"]
     
     def __init__(self, reactor, fileobj):
         BaseTransport.__init__(self, reactor)
@@ -87,17 +89,7 @@ class StreamTransport(BaseTransport):
         return self.fileobj.write(count)
 
 
-class WrappedStreamTransport(StreamTransport):
-    def __init__(self, transport):
-        BaseTransport.__init__(self, transport.reactor)
-        self.transport = transport
-    def fileno(self):
-        # this is a slot method, doesn't go through __getattr__
-        return self.transport.fileno()
-    def __getattr__(self, name):
-        if name.startswith("_"):
-            raise AttributeError(name)
-        return getattr(self.transport, name)
+
 
 
 

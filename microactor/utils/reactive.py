@@ -2,6 +2,13 @@ import sys
 import itertools
 import traceback
 from types import GeneratorType
+import inspect
+
+
+def format_stack():
+    frames = inspect.stack()[1:]
+    return traceback.format_list((f[1], f[2], f[3], f[4][f[5]]) 
+        for f in reversed(frames))
 
 
 class DeferredAlreadySet(Exception):
@@ -40,6 +47,7 @@ class Deferred(object):
     def throw(self, exc, with_traceback = True):
         if with_traceback:
             tbtext = "".join(traceback.format_exception(*sys.exc_info()))
+            tbtext += "\nfrom:\n" + "".join(format_stack())
             if not hasattr(exc, "_inner_tb"):
                 exc._inner_tb = [tbtext]
             else:

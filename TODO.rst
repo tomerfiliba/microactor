@@ -2,6 +2,7 @@ To do
 =====
 * Better exception tracebacks
 * Debug mode?
+* pipes on windows... with threads?
 * reactive:
 
   * require reactor argument?
