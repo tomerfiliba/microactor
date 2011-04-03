@@ -4,7 +4,7 @@ import threading
 
 class Queue(object):
     """
-    amortized O(1) queue
+    amortized O(1) queue ?
     """
     def __init__(self):
         self._rindex = 0
