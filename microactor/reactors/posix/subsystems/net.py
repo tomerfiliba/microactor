@@ -20,7 +20,7 @@ class TcpSubsystem(Subsystem):
         self.reactor.call(trns.connect, timeout)
         return dfr
     
-    def listen(self, port, host = "0.0.0.0", backlog = 10):
+    def listen(self, port, host = "0.0.0.0", backlog = 40):
         def do_listen():
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.setblocking(False)
