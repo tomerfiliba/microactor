@@ -1,10 +1,10 @@
 import select
-from .base import BaseReactor
+from .base import BasePosixReactor
 
 
-class PollReactor(BaseReactor):
+class PollReactor(BasePosixReactor):
     def __init__(self):
-        BaseReactor.__init__(self)
+        BasePosixReactor.__init__(self)
         self._poller = select.poll()
     
     @classmethod

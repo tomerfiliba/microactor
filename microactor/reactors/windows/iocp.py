@@ -1,13 +1,9 @@
-import itertools
 import time
-import socket
-try:
-    import win32file
-    import win32con
-except ImportError:
-    win32file = None
-    win32con = None 
-from .base import BaseReactor
+import itertools
+from microactor.utils import safe_import 
+from ..base import BaseReactor
+win32file = safe_import("win32file")
+win32con = safe_import("win32con")
 
 
 class IOCP(object):
@@ -41,7 +37,7 @@ class IocpReactor(BaseReactor):
     
     @classmethod
     def supported(cls):
-        return hasattr(win32file, "CreateIoCompletionPort")
+        return bool(win32file) and hasattr(win32file, "CreateIoCompletionPort")
     
     def _handle_transports(self, timeout):
         tmax = time.time() + timeout
@@ -54,12 +50,11 @@ class IocpReactor(BaseReactor):
                 break
             timeout = 0
     
-
-
-
-
-
-
+    def wakeup(self):
+        self._iocp.post()
+    
+    def register_file(self, fileobj):
+        self._iocp.register(fileobj)
 
 
 

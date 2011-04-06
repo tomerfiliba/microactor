@@ -2,22 +2,30 @@ import socket
 import errno
 import sys
 from .base import BaseTransport, StreamTransport
-from microactor.utils import Deferred
-from microactor.lib import Queue
+from microactor.utils.deferred import Deferred
+from microactor.utils.colls import Queue
 
 
 class TcpStreamTransport(StreamTransport):
+    __slots__ = ["local_addr", "peer_addr"]
+    _SHUTDOWN_MAP = {
+        "r" : socket.SHUT_RD, 
+        "w" : socket.SHUT_WR, 
+        "rw" : socket.SHUT_RDWR
+    }
+    
     def __init__(self, reactor, sock):
         StreamTransport.__init__(self, reactor, sock)
-        self.local_info = sock.getsockname()
-        self.peer_info = sock.getpeername()
+        sock.setblocking(False)
+        self.local_addr = sock.getsockname()
+        self.peer_addr = sock.getpeername()
     
     def close(self):
         self.shutdown()
         StreamTransport.close(self)
     
     def shutdown(self, mode = "rw"):
-        mode2 = {"r" : socket.SHUT_RD, "w" : socket.SHUT_WR, "rw" : socket.SHUT_RDWR}[mode]
+        mode2 = self._SHUTDOWN_MAP[mode]
         self.fileobj.shutdown(mode2)
     
     def _do_read(self, count):
@@ -82,6 +90,7 @@ class ConnectingSocketTransport(BaseTransport):
     
     def _attempt_connect(self):
         if self.deferred.is_set():
+            self._unregister()
             return
         err = self.sock.connect_ex(self.addr)
         if err in (errno.EINPROGRESS, errno.EALREADY, errno.EWOULDBLOCK):
@@ -107,51 +116,53 @@ class ConnectingSocketTransport(BaseTransport):
 
 
 class UdpTransport(BaseTransport):
+    __slots__ = ["_sock", "_read_queue", "_write_queue"]
     MAX_UDP_PACKET_SIZE = 8192
     
     def __init__(self, reactor, sock):
         BaseTransport.__init__(self, reactor)
-        self.sock = sock
-        self.read_queue = Queue()
-        self.write_queue = Queue()
+        sock.setblocking(False)
+        self._sock = sock
+        self._read_queue = Queue()
+        self._write_queue = Queue()
         
     def close(self):
         self._unregister()
-        self.sock.close()
+        self._sock.close()
     
     def sendto(self, host, port, data):
         if len(data) > self.MAX_UDP_PACKET_SIZE:
             raise ValueError("data too long")
         dfr = Deferred()
-        self.queue.push((dfr, (host, port), data))
+        self._write_queue.push((dfr, (host, port), data))
         self.reactor.register_write(self)
         return dfr
     
     def recvfrom(self, count = -1):
         dfr = Deferred()
-        self.queue.push((dfr, count))
+        self._read_queue.push((dfr, count))
         self.reactor.register_read(self)
         return dfr
     
     def on_read(self, hint):
-        dfr, count = self.write_queue.pop()
+        dfr, count = self._read_queue.pop()
         if hint < count:
             hint = count
         if hint < 0:
             hint = self.MAX_UDP_PACKET_SIZE
         try:
-            data, (host, port) = self.sock.recvfrom(hint)
+            data, (host, port) = self._sock.recvfrom(hint)
         except Exception as ex:
             dfr.throw(ex)
         else:
             dfr.set((host, port, data))
-        if not self.read_queue:
+        if not self._read_queue:
             self.reactor.unregister_read(self)
 
     def on_write(self, hint):
-        dfr, addr, data = self.write_queue.pop()
+        dfr, addr, data = self._write_queue.pop()
         try:
-            count = self.sock.sendto(data, addr)
+            count = self._sock.sendto(data, addr)
         except Exception as ex:
             dfr.throw(ex)
         else:
@@ -161,55 +172,56 @@ class UdpTransport(BaseTransport):
 
 
 class ConnectedUdpTransport(BaseTransport):
+    __slots__ = ["_sock", "_read_queue", "_write_queue"]
+
     def __init__(self, reactor, sock):
         BaseTransport.__init__(self, reactor)
-        self.sock = sock
-        self.read_queue = Queue()
-        self.write_queue = Queue()
+        self._sock = sock
+        self._read_queue = Queue()
+        self._write_queue = Queue()
         
     def close(self):
         self._unregister()
-        self.sock.close()
+        self._sock.close()
     
     def send(self, data):
         if len(data) > UdpTransport.MAX_UDP_PACKET_SIZE:
             raise ValueError("data too long")
         dfr = Deferred()
-        self.queue.push((dfr, data))
+        self._write_queue.push((dfr, data))
         self.reactor.register_write(self)
         return dfr
     
     def recv(self, count = -1):
         dfr = Deferred()
-        self.queue.push((dfr, count))
+        self._read_queue.push((dfr, count))
         self.reactor.register_read(self)
         return dfr
     
     def on_read(self, hint):
-        dfr, count = self.write_queue.pop()
+        dfr, count = self._read_queue.pop()
         if hint < count:
             hint = count
         if hint < 0:
             hint = UdpTransport.MAX_UDP_PACKET_SIZE
         try:
-            data = self.sock.recv(hint)
+            data = self._sock.recv(hint)
         except Exception as ex:
             dfr.throw(ex)
         else:
             dfr.set(data)
-        if not self.read_queue:
+        if not self._read_queue:
             self.reactor.unregister_read(self)
 
     def on_write(self, hint):
-        dfr, data = self.write_queue.pop()
+        dfr, data = self._write_queue.pop()
         try:
-            count = self.sock.send(data)
+            count = self._sock.send(data)
         except Exception as ex:
             dfr.throw(ex)
         else:
             dfr.set(count)
-        if not self.write_queue:
+        if not self._write_queue:
             self.reactor.unregister_write(self)
-
 
 

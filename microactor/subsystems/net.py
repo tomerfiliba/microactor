@@ -2,8 +2,6 @@ from .base import Subsystem
 from microactor.utils import reactive, rreturn
 import ssl
 
-from microactor.reactors.posix.transports.sockets import TcpStreamTransport
-
 
 class SslHandshakeTransport(BaseTransport):
     def __init__(self, reactor, sslsock, dfr):
@@ -40,17 +38,18 @@ class SslHandshakeTransport(BaseTransport):
         self.handshake()
 
 
+"""
 class SslListeningSocketTransport(ListeningSocketTransport):
     @reactive
     def accept(self):
         conn = yield ListeningSocketTransport.accept(self)
-        rreturn conn
+        sock = conn.fileobj
         
         self.reactor.register_read(self)
         dfr = Deferred()
         self.accept_queue.push(dfr)
         return dfr
-
+"""
 
 class SslSubsystem(Subsystem):
     NAME = "ssl"

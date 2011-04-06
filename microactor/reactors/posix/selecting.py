@@ -1,15 +1,15 @@
-import select
-import socket   # needed for windows, in order for select to work
 import time
-from .base import BaseReactor
+import select
+from .base import BasePosixReactor
 
 
-class SelectReactor(BaseReactor):
+class SelectReactor(BasePosixReactor):
     @classmethod
     def supported(cls):
         return hasattr(select, "select")
     
     def _handle_transports(self, timeout):
+        self._changed_transports.clear()
         if not self._read_transports and not self._write_transports:
             time.sleep(timeout)
             return
