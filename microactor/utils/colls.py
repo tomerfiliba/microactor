@@ -44,35 +44,6 @@ class MinHeap(object):
     def __len__(self):
         return len(self._items)
 
-class Blocker(object):
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._waiters = []
-        self._unattented_wakeups = 0
-    def clear(self):
-        with self._lock:
-            self._unattented_wakeups = 0
-    def wakeup(self):
-        with self._lock:
-            if self._waiters:
-                w = self._waiters.pop(0)
-            else:
-                w = None
-                self._unattented_wakeups += 1
-        if w:
-            w.release()
-    def wait(self):
-        w = threading.Lock()
-        w.acquire()
-        with self._lock:
-            if self._unattented_wakeups > 0:
-                self._unattented_wakeups -= 1
-                w.release()
-            else:
-                self._waiters.append(w)
-        with w:
-            pass
-
 class SynchronizedQueue(object):
     def __init__(self):
         self._lock = threading.Lock()
@@ -89,27 +60,7 @@ class SynchronizedQueue(object):
         with self._lock:
             self._queue.clear()
 
-class ThreadSafeQueue(object):
-    """a thread-safe queue (uses locking)"""
-    def __init__(self):
-        self._non_empty = Blocker()
-        self._queue = SynchronizedQueue()
-        self._lock = threading.Lock()
-    def __len__(self):
-        return len(self._queue)
-    def push(self, obj):
-        with self._lock:
-            self._queue.push(obj)
-            self._non_empty.wakeup()
-    def pop(self):
-        while True:
-            self._non_empty.wait()
-            if self._queue:
-                return self._queue.pop()
-    def clear(self):
-        with self._lock:
-            self._queue.clear()
-            self._non_empty.clear()
+
 
 class ReactiveQueue(object):
     """a reactive queue"""

@@ -1,7 +1,7 @@
 import threading
-from microactor.subsystems.base import Subsystem
+from .base import Subsystem
 from microactor.utils import Deferred
-from microactor.lib.colls import ThreadSafeQueue
+from Queue import Queue as ThreadSafeQueue
 
 
 class ThreadPool(object):
@@ -9,24 +9,23 @@ class ThreadPool(object):
         self.reactor = reactor
         self.active = True
         self.tasks = ThreadSafeQueue()
-        self.threads = set()
+        self.all_done = ThreadSafeQueue()
         for i in range(num_of_threads):
-            thd = threading.Thread(name = "pool-%r" % (i,), target = self._thread_pool_main)
-            self.threads.add(thd)
+            thd = threading.Thread(name = "pool-thread-%d" % (i,), target = self._thread_pool_main)
+            self.all_done.put(None)
             thd.start()
     
     def close(self):
         self.active = False
-        self.tasks.clear()
         for i in range(num_of_threads):
             self.tasks.push((None, None, None, None))
-        #return self.reactor.threading.call(self.running_threads.join)
+        return self.reactor.threading.call(self.running_threads.join)
     
     def _thread_pool_main(self):
         try:
-            while self.active:
+            while True:
                 func, args, kwargs, dfr = self.tasks.get()
-                if not self.active:
+                if func is None:
                     break
                 try:
                     res = func(*args, **kwargs)
@@ -35,11 +34,13 @@ class ThreadPool(object):
                 else:
                     self.reactor.call(dfr.set, res)
         finally:
-            self.threads.discard(thd)
+            self.all_done.task_done()
     
     def call(self, func, *args, **kwargs):
+        if not self.active:
+            raise Kaputen()
         dfr = Deferred()
-        self.tasks.push((func, args, kwargs, dfr))
+        self.tasks.put((func, args, kwargs, dfr))
         return dfr
 
 

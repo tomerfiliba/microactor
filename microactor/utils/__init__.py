@@ -1,4 +1,5 @@
-from .reactive import Deferred, rreturn, reactive
+from .deferred import Deferred
+from .reactive import rreturn, reactive
 
 
 class MissingModule(object):

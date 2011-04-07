@@ -4,6 +4,7 @@ To do
 * logging!
 * RPC
 * Debug mode?
+* block signals on worker threads
 * reactive:
 
   * require reactor argument?

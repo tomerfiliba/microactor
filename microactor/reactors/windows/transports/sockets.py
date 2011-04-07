@@ -1,6 +1,7 @@
 from microactor.transports import BaseTransport
 from microactor.utils import Deferred
 
+
 class IocpStreamTransport(BaseTransport):
     MAX_WRITE_SIZE = 32000
     MAX_READ_SIZE = 32000
