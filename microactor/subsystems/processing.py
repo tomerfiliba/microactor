@@ -1,11 +1,9 @@
 import os
 import signal
 import subprocess
-import threading
 from microactor.subsystems.base import Subsystem
-from microactor.utils import Deferred, reactive, rreturn
-from microactor.transports import PipeTransport, BufferedTransport
-from microactor.lib.colls import ThreadSafeQueue
+from microactor.utils import Deferred, reactive, rreturn, BufferedTransport
+from microactor.transports import PipeTransport
 
 
 class Process(object):
@@ -62,7 +60,6 @@ class ProcessPool(object):
 
 class ProcessSubsystem(Subsystem):
     NAME = "proc"
-    DEPENDS = ["jobs"]
     POLL_INTERVAL = 0.2
     
     def _init(self):
@@ -152,6 +149,9 @@ class ProcessSubsystem(Subsystem):
             raise ValueError("process failed", rc, stdout_data, stderr_data)
         else:
             rreturn((rc, stdout_data, stderr_data))
+    
+    def process_pool(self, service, max_processes):
+        pass
 
 
 

@@ -1,10 +1,17 @@
 import sys
 import itertools
 import traceback
+import inspect
 
 
 class DeferredAlreadySet(Exception):
     pass
+
+
+def format_stack():
+    frames = inspect.stack()[1:]
+    return traceback.format_list((f[1], f[2], f[3], f[4][f[5]]) 
+        for f in reversed(frames))
 
 
 class Deferred(object):

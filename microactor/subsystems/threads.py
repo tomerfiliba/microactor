@@ -1,32 +1,24 @@
+import itertools
 import threading
 from .base import Subsystem
 from microactor.utils import Deferred
-from Queue import Queue as ThreadSafeQueue
+from Queue import Queue as ConsumerProducerQueue
 
 
-class ThreadPool(object):
-    def __init__(self, reactor, num_of_threads):
-        self.reactor = reactor
-        self.active = True
-        self.tasks = ThreadSafeQueue()
-        self.all_done = ThreadSafeQueue()
-        for i in range(num_of_threads):
-            thd = threading.Thread(name = "pool-thread-%d" % (i,), target = self._thread_pool_main)
-            self.all_done.put(None)
-            thd.start()
+class ThreadingSubsystem(Subsystem):
+    NAME = "threading"
+    DEFAULT_MAX_WORKERS = 10
+    ID_GENERATOR = itertools.count()
     
-    def close(self):
-        self.active = False
-        for i in range(num_of_threads):
-            self.tasks.push((None, None, None, None))
-        return self.reactor.threading.call(self.running_threads.join)
+    def _init(self):
+        self._max_workers = self.DEFAULT_MAX_WORKERS
+        self._workers = {}
+        self._tasks = ConsumerProducerQueue()
     
-    def _thread_pool_main(self):
+    def _worker_thread(self, id):
         try:
             while True:
-                func, args, kwargs, dfr = self.tasks.get()
-                if func is None:
-                    break
+                func, args, kwargs, dfr = self._tasks.get()
                 try:
                     res = func(*args, **kwargs)
                 except Exception as ex:
@@ -34,41 +26,32 @@ class ThreadPool(object):
                 else:
                     self.reactor.call(dfr.set, res)
         finally:
-            self.all_done.task_done()
+            self._workers.pop(id, None)
+    
+    def set_max_workers(self, num):
+        self._max_workers = num
+    
+    def get_num_of_workers(self):
+        return len(self._workers)
+    
+    def _spawn_workers(self):
+        if len(self._tasks) <= len(self._workers):
+            return
+        if len(self._workers) >= self._max_workers:
+            return
+        needed = min(len(self._tasks) - len(self._workers), self._max_workers)
+        for _ in range(needed):
+            tid = self.ID_GENERATOR.next()
+            thd = threading.Thread(name = "worker-%d" % (tid,), target = self._worker_thread, args = (tid,))
+            thd.setDaemon()
+            self._workers[tid] = thd
+            thd.start()
     
     def call(self, func, *args, **kwargs):
-        if not self.active:
-            raise Kaputen()
         dfr = Deferred()
         self.tasks.put((func, args, kwargs, dfr))
+        self._spawn_workers()
         return dfr
-
-
-class ThreadingSubsystem(Subsystem):
-    NAME = "threading"
-    
-    def _init(self):
-        self.threads = set()
-    
-    def call(self, func, *args, **kwargs):
-        dfr = Deferred()
-        def wrapper():
-            try:
-                res = func(*args, **kwargs)
-            except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
-            else:
-                self.reactor.call(dfr.set, res)
-            finally:
-                self.threads.discard(thd)
-        thd = threading.Thread(target = wrapper)
-        self.threads.add(thd)
-        thd.start()
-        return dfr
-    
-    def thread_pool(self, size):
-        return ThreadPool(self.reactor, size)
-
 
 
 

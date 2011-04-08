@@ -1,5 +1,6 @@
 from .deferred import Deferred
 from .reactive import rreturn, reactive
+from .transport_wrappers import BufferedTransport, BoundTransport
 
 
 class MissingModule(object):
@@ -18,3 +19,5 @@ def safe_import(modname):
     except ImportError:
         mod = MissingModule(modname)
     return mod
+
+

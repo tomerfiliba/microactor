@@ -1,21 +1,30 @@
 import select
-from .base import BasePosixReactor
+from .base import PosixPollingReactor
 
 
-class PollReactor(BasePosixReactor):
+class PollReactor(PosixPollingReactor):
     def __init__(self):
-        BasePosixReactor.__init__(self)
+        PosixPollingReactor.__init__(self)
         self._poller = select.poll()
-    
+
+    def register_read(self, transport):
+        self._register_transport(transport, select.POLLIN)
+    def register_write(self, transport):
+        self._register_transport(transport, select.POLLOUT)
+
     @classmethod
     def supported(cls):
-        return False
-        #return hasattr(select, "poll")
-    
+        return hasattr(select, "poll")
+
     def _handle_transports(self, timeout):
-        pass
-
-
-
-
-
+        self._update_poller()
+        events = self._poller.poll(timeout)
+        
+        for fd, flags in events:
+            trns, _ = self._registered_with_epoll[fd]
+            if flags & select.POLLIN or flags & select.POLLPRI:
+                self.call(trns.on_read, -1)
+            if flags & select.POLLOUT:
+                self.call(trns.on_write, -1)
+            if flags & select.POLLERR or flags & select.POLLHUP:
+                self.call(trns.on_error, None)

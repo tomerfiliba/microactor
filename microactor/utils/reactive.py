@@ -1,23 +1,11 @@
 import sys
-import itertools
-import traceback
 from types import GeneratorType
-import inspect
 from .deferred import Deferred
  
-
-def format_stack():
-    frames = inspect.stack()[1:]
-    return traceback.format_list((f[1], f[2], f[3], f[4][f[5]]) 
-        for f in reversed(frames))
-
 
 class ReactiveReturn(Exception):
     def __init__(self, value):
         self.value = value
-
-class ReactiveError(Exception):
-    pass
 
 def rreturn(value = None):
     raise ReactiveReturn(value)
@@ -70,6 +58,8 @@ def reactive(func):
         else:
             if isinstance(gen, GeneratorType):
                 continuation(False, None)
+            elif isinstance(gen, Deferred):
+                gen.register(lambda is_exc, value: retval.set(value, is_exc))
             else:
                 retval.set(gen)
         
@@ -81,30 +71,6 @@ def reactive(func):
         return retval
     
     return wrapper
-
-from microactor.lib import Queue
-
-
-class Mutex(object):
-    def __init__(self):
-        self.owned = False
-        self.queue = Queue()
-    
-    def acquire(self):
-        dfr = Deferred()
-        if not self.owned:
-            self.owned = True
-            dfr.set()
-        else:
-            self.queue.push(dfr)
-        return dfr
-    
-    def release(self):
-        if not self.queue:
-            self.owned = False
-        else:
-            dfr = self.queue.pop()
-            dfr.set()
 
 
 

@@ -1,6 +1,6 @@
 import sys
 from microactor.subsystems import Subsystem
-from microactor.utils import Deferred
+from microactor.utils import Deferred, reactive, rreturn, BufferedTransport
 from ..transports.files import FileTransport, PipeTransport
 
 
@@ -17,7 +17,7 @@ class FilesSubsystem(Subsystem):
             try:
                 fileobj = open(path, mode)
             except Exception as ex:
-                dfr.throw(ex)
+                self.reactor.call(dfr.throw, ex)
                 return
             mode2 = ""
             if "r" in mode or "+" in mode:
@@ -25,11 +25,19 @@ class FilesSubsystem(Subsystem):
             if "a" in mode or "+" in mode:
                 mode2 += "w"
             trns = FileTransport(self.reactor, fileobj, mode2)
-            dfr.set(trns)
+            self.reactor.call(dfr.set, trns)
         
         dfr = Deferred()
         self.reactor.call(opener)
         return dfr
+
+    @reactive
+    def open_buffered(self, path, mode = "rt"):
+        trns = yield self.open()
+        rreturn(BufferedTransport(self.reactor, trns))
+
+
+
 
 
 
