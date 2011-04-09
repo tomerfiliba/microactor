@@ -35,6 +35,7 @@ class IocpReactor(BaseReactor):
     def __init__(self):
         BaseReactor.__init__(self)
         self._iocp = IOCP()
+        self._transports = set()
     
     @classmethod
     def supported(cls):
@@ -42,6 +43,7 @@ class IocpReactor(BaseReactor):
 
     def register_transport(self, transport):
         self._iocp.register(transport.fileno())
+        self._transports.add(transport)
 
     def wakeup(self):
         self._iocp.post()

@@ -21,6 +21,14 @@ class SelectReactor(BasePosixReactor):
         if fd in self._write_transports and self._write_transports[fd] is not transport:
             raise ReactorError("multiple transports register for the same fd")
         self._write_transports[fd] = transport
+
+    def unregister_read(self, transport):
+        fd = transport.fileno()
+        self._read_transports.pop(fd, None)
+        
+    def unregister_write(self, transport):
+        fd = transport.fileno()
+        self._write_transports.pop(fd, None)
     
     @classmethod
     def supported(cls):
@@ -41,8 +49,6 @@ class SelectReactor(BasePosixReactor):
             self.call(self._read_transports[fd].on_read, -1)
         for fd in wlst:
             self.call(self._write_transports[fd].on_write, -1)
-        self._read_transports.clear()
-        self._write_transports.clear()
 
     def _prune_bad_fds(self):
         for transports in [self._read_transports, self._write_transports]:

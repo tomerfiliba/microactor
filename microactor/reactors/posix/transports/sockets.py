@@ -50,7 +50,7 @@ class ListeningSocketTransport(BaseTransport):
         self.accept_queue = Queue()
     
     def close(self):
-        BaseTransport.close(self)
+        self._unregister()
         self.sock.close()
     def fileno(self):
         return self.sock.fileno()
@@ -76,7 +76,7 @@ class ConnectingSocketTransport(BaseTransport):
         self.transport_factory = transport_factory
     
     def close(self):
-        BaseTransport.close(self)
+        self._unregister()
         self.sock.close()
     def fileno(self):
         return self.sock.fileno()
@@ -129,6 +129,8 @@ class UdpTransport(BaseTransport):
     def close(self):
         self._unregister()
         self._sock.close()
+    def fileno(self):
+        return self._sock.fileno()
     
     def sendto(self, host, port, data):
         if len(data) > self.MAX_UDP_PACKET_SIZE:
@@ -183,6 +185,8 @@ class ConnectedUdpTransport(BaseTransport):
     def close(self):
         self._unregister()
         self._sock.close()
+    def fileno(self):
+        return self._sock.fileno()
     
     def send(self, data):
         if len(data) > UdpTransport.MAX_UDP_PACKET_SIZE:

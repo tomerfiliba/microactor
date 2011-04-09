@@ -1,7 +1,7 @@
 import weakref
 import signal
 from .transports import EventTransport
-from ..base import BaseReactor
+from ..base import BaseReactor, ReactorError
 
 
 class BasePosixReactor(BaseReactor):
@@ -9,6 +9,7 @@ class BasePosixReactor(BaseReactor):
         BaseReactor.__init__(self)
         self._signal_handlers = {}
         self._wakeup = EventTransport(weakref.proxy(self))
+        self.register_read(self._wakeup)
     
     def wakeup(self):
         self._wakeup.set()
@@ -19,6 +20,10 @@ class BasePosixReactor(BaseReactor):
     def register_read(self, transport):
         raise NotImplementedError()
     def register_write(self, transport):
+        raise NotImplementedError()
+    def unregister_read(self, transport):
+        raise NotImplementedError()
+    def unregister_write(self, transport):
         raise NotImplementedError()
 
     #===========================================================================
@@ -61,13 +66,24 @@ class PosixPollingReactor(BasePosixReactor):
         fd = transport.fileno()
         if fd in self._transports:
             trns, mask = self._transports[fd]
-            assert trns is transport
+            if trns is not transport:
+                raise ReactorError("multiple transports register for the same fd")
         else:
             mask = 0
         self._transports[fd] = (transport, mask | flag)
+    
+    def _unregister_transport(self, transport, flag):
+        fd = transport.fileno()
+        if fd not in self._transports:
+            return
+        _, mask = self._transports[fd]
+        new_mask = mask & ~flag
+        if not new_mask:
+            del self._transports[fd]
+        else:
+            self._transports[fd] = (transport, new_mask)
 
     def _update_poller(self):
-        self.register_read(self._wakeup)
         for fd, (_, flags) in self._transports.items():
             if fd not in self._prev_transports:
                 self._epoll.register(fd, flags)
@@ -78,8 +94,7 @@ class PosixPollingReactor(BasePosixReactor):
         for fd in self._prev_transports:
             if fd not in self._transports:
                 self._epoll.unregister(fd)
-        self._prev_transports = self._transports
-        self._transports = {}
+        self._prev_transports = self._transports.copy()
     
 
 

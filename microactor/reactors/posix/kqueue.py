@@ -29,6 +29,10 @@ class KqueueReactor(PosixPollingReactor):
         self._register_transport(transport, select.POLLIN)
     def register_write(self, transport):
         self._register_transport(transport, select.POLLOUT)
+    def unregister_read(self, transport):
+        self._unregister_transport(transport, select.POLLIN)
+    def unregister_write(self, transport):
+        self._unregister_transport(transport, select.POLLOUT)
     
     @classmethod
     def supported(cls):

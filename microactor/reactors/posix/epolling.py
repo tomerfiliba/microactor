@@ -11,6 +11,10 @@ class EpollReactor(PosixPollingReactor):
         self._register_transport(transport, select.EPOLLIN)
     def register_write(self, transport):
         self._register_transport(transport, select.EPOLLOUT)
+    def unregister_read(self, transport):
+        self._unregister_transport(transport, select.EPOLLIN)
+    def unregister_write(self, transport):
+        self._unregister_transport(transport, select.EPOLLOUT)
 
     @classmethod
     def supported(cls):
