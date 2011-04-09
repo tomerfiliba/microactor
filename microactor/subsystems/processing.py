@@ -3,7 +3,6 @@ import signal
 import subprocess
 from microactor.subsystems.base import Subsystem
 from microactor.utils import Deferred, reactive, rreturn, BufferedTransport
-from microactor.transports import PipeTransport
 
 
 class Process(object):
@@ -11,9 +10,9 @@ class Process(object):
         self.reactor = reactor
         self.cmdline = cmdline
         self._proc = proc
-        self.stdin = BufferedTransport(PipeTransport(reactor, proc.stdin, "w"))
-        self.stdout = BufferedTransport(PipeTransport(reactor, proc.stdout, "r"))
-        self.stderr = BufferedTransport(PipeTransport(reactor, proc.stderr, "r"))
+        self.stdin = BufferedTransport(self.reactor.files.wrap_pipe(proc.stdin, "w"))
+        self.stdout = BufferedTransport(self.reactor.files.wrap_pipe(proc.stdout, "r"))
+        self.stderr = BufferedTransport(self.reactor.files.wrap_pipe(proc.stderr, "r"))
         self.pid = proc.pid
         self.waiters_queue = []
     

@@ -27,6 +27,7 @@ class IOCP(object):
             key = self._post_key
         win32file.PostQueuedCompletionStatus(self._port, size, key, overlapped)
     def wait(self, timeout):
+        """returns (rc, size, key, overlapped)"""
         return win32file.GetQueuedCompletionStatus(self._port, int(timeout * 1000))
 
 
@@ -38,23 +39,25 @@ class IocpReactor(BaseReactor):
     @classmethod
     def supported(cls):
         return bool(win32file) and hasattr(win32file, "CreateIoCompletionPort")
+
+    def register_transport(self, transport):
+        self._iocp.register(transport.fileno())
+
+    def wakeup(self):
+        self._iocp.post()
     
     def _handle_transports(self, timeout):
         tmax = time.time() + timeout
         while True:
-            rc, size, key, overlapped = self._iocp.wait(timeout)
+            rc, size, _, overlapped = self._iocp.wait(timeout)
             if rc == win32con.WAIT_TIMEOUT:
                 break
-            overlapped.object(rc, size, key, overlapped)
+            self.call(overlapped.object, size, overlapped)
             if time.time() > tmax:
                 break
             timeout = 0
     
-    def wakeup(self):
-        self._iocp.post()
     
-    def register_file(self, fileobj):
-        self._iocp.register(fileobj)
 
 
 

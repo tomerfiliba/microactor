@@ -1,4 +1,5 @@
 import sys
+import os
 from microactor.subsystems import Subsystem
 from microactor.utils import Deferred, reactive, rreturn, BufferedTransport
 from ..transports.files import FileTransport, PipeTransport
@@ -35,6 +36,26 @@ class FilesSubsystem(Subsystem):
     def open_buffered(self, path, mode = "rt"):
         trns = yield self.open()
         rreturn(BufferedTransport(self.reactor, trns))
+    
+    def open_pipe(self):
+        """returns a (read-pipe, write-pipe) pair of transports"""
+        def opener():
+            try:
+                rfd, wfd = os.pipe()
+            except Exception as ex:
+                self.reactor.call(dfr.throw, ex)
+            else:
+                rtrns = self.wrap_pipe(os.fdopen(rfd, "r"), "r")
+                wtrns = self.wrap_pipe(os.fdopen(wfd, "w"), "w")
+                self.reactor.call(dfr.set, (rtrns, wtrns))
+        
+        dfr = Deferred()
+        self.reactor.call(opener)
+        return dfr
+    
+    def wrap_pipe(self, fileobj, mode):
+        return PipeTransport(self.reactor, fileobj, mode)
+
 
 
 

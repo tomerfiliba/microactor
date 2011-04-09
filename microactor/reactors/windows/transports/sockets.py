@@ -1,4 +1,4 @@
-from microactor.transports import BaseTransport
+from .base import BaseTransport
 from microactor.utils import Deferred
 
 
