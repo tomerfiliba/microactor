@@ -15,11 +15,15 @@ class PipeTransport(StreamTransport):
         self._flush_dfr = None
         self._unblock(fileobj.fileno())
         StreamTransport.__init__(self, reactor, fileobj)
+        if "r" not in self.mode:
+            self.read = self._wrong_mode
         if "w" not in self.mode:
-            def write(data):
-                raise IOError("file mode does not allow for writing")
-            self.write = write
-            self.flush = write
+            self.write = self._wrong_mode
+            self.flush = self._wrong_mode
+
+    @staticmethod
+    def _wrong_mode(*args):
+        raise IOError("file mode does not permit this operation")
 
     @classmethod
     def _unblock(cls, fd):

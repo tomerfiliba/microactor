@@ -1,4 +1,5 @@
 import time
+import weakref
 from functools import partial
 from microactor.utils.colls import MinHeap
 
@@ -21,7 +22,10 @@ class BaseReactor(object):
         return False
 
     def install_subsystem(self, factory):
-        pass
+        subsys = self.factory(weakref.proxy(self.reactor))
+        if hasattr(self, subsys.NAME):
+            raise ValueError("subsystem %r masks an existing attribute" % (subsys.NAME,))
+        setattr(self, subsys.NAME, subsys)
 
     #===========================================================================
     # Core
@@ -36,8 +40,11 @@ class BaseReactor(object):
         self._active = True
         while self._active:
             self._work()
+        self._shutdown()
         self._handle_callbacks()
-        self._wakeup.reset()
+    
+    def _shutdown(self):
+        raise NotImplementedError()
     
     def wakeup(self):
         raise NotImplementedError()
@@ -45,10 +52,8 @@ class BaseReactor(object):
     def stop(self):
         if not self._active:
             raise ReactorError("reactor not running")
-        self._callbacks.extend(self._on_exit_callbacks)
-        del self._on_exit_callbacks[:]
         self._active = False
-        self._wakeup.set()
+        self.wakeup()
 
     def _work(self):
         now = time.time()

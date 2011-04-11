@@ -1,14 +1,13 @@
 from microactor.subsystems.base import Subsystem
 from microactor.utils import reactive, rreturn
-from microactor.lib import istr
-from microactor.transports import BufferedTransport, BoundTransport
+from microactor.utils import BufferedTransport, BoundTransport
 
 
 class CaseInsensitiveDict(dict):
     def __init__(self, *args, **kwargs):
         self.update(*args, **kwargs)
     def __setitem__(self, name, value):
-        return dict.__setitem__(self, istr(name), value)
+        return dict.__setitem__(self, name.lower(), value)
     def update(self, *args, **kwargs):
         d = dict(*args, **kwargs)
         for k, v in d.items():

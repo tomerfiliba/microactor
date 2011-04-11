@@ -1,12 +1,11 @@
-from .base import StreamTransport
 from microactor.utils import reactive, rreturn
 
 
-class WrappedStreamTransport(StreamTransport):
+class WrappedStreamTransport(object):
     __slots__ = ["transport"]
     
     def __init__(self, transport):
-        StreamTransport.__init__(self, transport.reactor, None)
+        self.reactor = transport.reactor
         self.transport = transport
     
     def close(self):

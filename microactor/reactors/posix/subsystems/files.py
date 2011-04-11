@@ -9,9 +9,9 @@ class FilesSubsystem(Subsystem):
     NAME = "files"
     
     def _init(self):
-        self.stdin = PipeTransport(self.reactor, sys.stdin, "r")
-        self.stdout = PipeTransport(self.reactor, sys.stdout, "w")
-        self.stderr = PipeTransport(self.reactor, sys.stderr, "w")
+        self.stdin = self.wrap_pipe(sys.stdin, "r")
+        self.stdout = self.wrap_pipe(sys.stdout, "w")
+        self.stderr = self.wrap_pipe(sys.stderr, "w")
     
     def open(self, path, mode = "rt"):
         def opener():

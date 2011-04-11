@@ -4,7 +4,7 @@ from .transport_wrappers import BufferedTransport, BoundTransport
 
 
 class MissingModule(object):
-    __slots__ = ()
+    __slots__ = ("__name__", "__file__")
     def __init__(self, name):
         self.__name__ = name
         self.__file__ = None

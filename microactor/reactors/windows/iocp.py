@@ -40,6 +40,9 @@ class IocpReactor(BaseReactor):
     @classmethod
     def supported(cls):
         return bool(win32file) and hasattr(win32file, "CreateIoCompletionPort")
+    
+    def _shutdown(self):
+        pass
 
     def register_transport(self, transport):
         self._iocp.register(transport.fileno())

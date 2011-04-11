@@ -4,12 +4,13 @@ references:
 * http://www.google.com/codesearch/p?hl=en#T4zviHTmECg/trunk/exeLearning/twisted/internet/iocpreactor/_iocp.c&q=WSASendTo%20lang:python&d=5&l=348
 """
 import ctypes
+import socket # to initialize winsock
 
 winsockdll = None
 def _init_winsockdll():
     global winsockdll
     if not winsockdll:
-        winsockdll = ctypes.WinDLL("Ws2_32")
+        winsockdll = ctypes.WinDLL("Ws2_32.dll")
 
 def WSASendTo():
     _init_winsockdll()

@@ -11,6 +11,9 @@ class BasePosixReactor(BaseReactor):
         self._wakeup = EventTransport(weakref.proxy(self))
         self.register_read(self._wakeup)
     
+    def _shutdown(self):
+        self._wakeup.reset()
+    
     def wakeup(self):
         self._wakeup.set()
     
@@ -39,7 +42,7 @@ class BasePosixReactor(BaseReactor):
             else:
                 # defer
                 self.call(handler, signum)
-        self._wakeup.set()
+        self.wakeup()
 
     def register_signal(self, signum, callback):
         """callback signature: (signum)"""
@@ -61,6 +64,12 @@ class PosixPollingReactor(BasePosixReactor):
         BasePosixReactor.__init__(self)
         self._transports = {}
         self._prev_transports = {}
+    
+    def _shutdown(self):
+        for _, (trns, _) in self._transports:
+            trns.close()
+        self._transports.clear()
+        BasePosixReactor._shutdown(self)
 
     def _register_transport(self, transport, flag):
         fd = transport.fileno()

@@ -2,7 +2,7 @@ import itertools
 import threading
 from .base import Subsystem
 from microactor.utils import Deferred
-from Queue import Queue as ConsumerProducerQueue
+from Queue import Queue as ThreadSafeQueue
 
 
 class ThreadingSubsystem(Subsystem):
@@ -13,12 +13,15 @@ class ThreadingSubsystem(Subsystem):
     def _init(self):
         self._max_workers = self.DEFAULT_MAX_WORKERS
         self._workers = {}
-        self._tasks = ConsumerProducerQueue()
+        self._tasks = ThreadSafeQueue()
     
     def _worker_thread(self, id):
         try:
             while True:
-                func, args, kwargs, dfr = self._tasks.get()
+                task = self._tasks.get()
+                if not task:
+                    break
+                func, args, kwargs, dfr = task
                 try:
                     res = func(*args, **kwargs)
                 except Exception as ex:
@@ -29,9 +32,15 @@ class ThreadingSubsystem(Subsystem):
             self._workers.pop(id, None)
     
     def set_max_workers(self, num):
+        """sets the maximal number of worker threads"""
+        if num > len(self._workers):
+            # put required amount of "poison tasks"
+            for _ in range(num - len(self._workers)):
+                self._tasks.put(None)
         self._max_workers = num
     
     def get_num_of_workers(self):
+        """returns the actual number of worker threads"""
         return len(self._workers)
     
     def _spawn_workers(self):
@@ -48,9 +57,27 @@ class ThreadingSubsystem(Subsystem):
             thd.start()
     
     def call(self, func, *args, **kwargs):
+        """enqueues the given task into the thread pool, returns a deferred"""
         dfr = Deferred()
-        self.tasks.put((func, args, kwargs, dfr))
+        self._tasks.put((func, args, kwargs, dfr))
         self._spawn_workers()
+        return dfr
+    
+    def call_nonpooled(self, func, *args, **kwargs):
+        """spawns a new thread to process the task (not going through the 
+        thread pool)"""
+        def nonpooled_task():
+            try:
+                res = func(*args, **kwargs)
+            except Exception as ex:
+                self.reactor.call(dfr.throw, ex)
+            else:
+                self.reactor.call(dfr.set, res)
+        
+        dfr = Deferred()
+        thd = threading.Thread(target = nonpooled_task)
+        thd.setDaemon()
+        thd.start()
         return dfr
 
 

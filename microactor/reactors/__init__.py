@@ -1,10 +1,6 @@
 import weakref
-from .epolling import EpollReactor
-from .selecting import SelectReactor
-from .polling import PollReactor
-from .kqueue import KqueueReactor
-from .iocp import IocpReactor
-from microactor.subsystems import ALL_SUBSYSTEMS, init_subsystems
+from .posix import EpollReactor, SelectReactor, PollReactor, KqueueReactor
+from .windows import IocpReactor
 
 
 class UnsupportedReactor(Exception):
@@ -24,7 +20,7 @@ def get_reactor_factory():
             return cls
     raise UnsupportedReactor("none of the available reactors is supported on this platform")
 
-def get_reactor(name = None, subsystems = ALL_SUBSYSTEMS):
+def get_reactor(name = None):
     if name:
         factory = REACTORS[name]
     else:
@@ -32,7 +28,6 @@ def get_reactor(name = None, subsystems = ALL_SUBSYSTEMS):
     if not factory.supported():
         raise UnsupportedReactor("%r is not supported on this platform" % (factory,))
     reactor = factory()
-    init_subsystems(weakref.proxy(reactor), subsystems)
     return reactor
 
 

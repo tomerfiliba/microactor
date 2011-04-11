@@ -1,5 +1,6 @@
 from microactor.utils import safe_import, Deferred
 win32file = safe_import("win32file")
+msvcrt = safe_import("msvcrt")
 
 
 class BaseTransport(object):
@@ -30,7 +31,12 @@ class StreamTransport(BaseTransport):
     def close(self):
         self.fileobj.close()
     def fileno(self):
-        return self.fileobj.fileno()
+        return msvcrt.get_osfhandle(self.fileobj.fileno())
+    
+    def _get_read_overlapped(self):
+        return win32file.OVERLAPPED()
+    def _get_write_overlapped(self):
+        return win32file.OVERLAPPED()
     
     def read(self, count):
         count = min(count, self.MAX_READ_SIZE)
@@ -41,11 +47,15 @@ class StreamTransport(BaseTransport):
             self.reactor.call(dfr.set, data)
         
         dfr = Deferred()
-        overlapped = win32file.OVERLAPPED()
-        buf = win32file.AllocateReadBuffer(count)
-        win32file.ReadFile(self.fileno(), buf, overlapped)
-        overlapped.object = finished
-        self._keepalive[overlapped] = finished
+        try:
+            overlapped = self._get_read_overlapped()
+            buf = win32file.AllocateReadBuffer(count)
+            win32file.ReadFile(self.fileno(), buf, overlapped)
+        except Exception as ex:
+            dfr.throw(ex)
+        else:
+            overlapped.object = finished
+            self._keepalive[overlapped] = finished
         return dfr
     
     def write(self, data):
@@ -56,10 +66,14 @@ class StreamTransport(BaseTransport):
                 self.reactor.call(dfr.set)
                 return
             chunk = remaining[0][:self.MAX_WRITE_SIZE]
-            overlapped = win32file.OVERLAPPED()
-            win32file.WriteFile(self.fileno(), chunk, overlapped)
-            overlapped.object = finished
-            self._keepalive[overlapped] = finished
+            try:
+                overlapped = self._get_write_overlapped()
+                win32file.WriteFile(self.fileno(), chunk, overlapped)
+            except Exception as ex:
+                self.reactor.call(dfr.throw, ex)
+            else:
+                overlapped.object = finished
+                self._keepalive[overlapped] = finished
         
         def finished(size, overlapped):
             self._keepalive.pop(overlapped)

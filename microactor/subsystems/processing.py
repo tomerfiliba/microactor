@@ -22,7 +22,7 @@ class Process(object):
     def on_termination(self):
         rc = self.returncode
         for dfr in self.waiters_queue:
-            dfr.set(rc)
+            self.reactor.call(dfr.set, rc)
         del self.waiters_queue[:]
     
     @property
@@ -59,7 +59,7 @@ class ProcessPool(object):
 
 class ProcessSubsystem(Subsystem):
     NAME = "proc"
-    POLL_INTERVAL = 0.2
+    WINDOWS_POLL_INTERVAL = 0.2
     
     def _init(self):
         self.processes = {}
@@ -73,7 +73,7 @@ class ProcessSubsystem(Subsystem):
         else:
             # windows doesn't have sigchld, so let's just poll the process list
             # every so often
-            self.reactor.jobs.schedule_every(self.POLL_INTERVAL, self._windows_check_children)
+            self.reactor.jobs.schedule_every(self.WINDOWS_POLL_INTERVAL, self._windows_poll_children)
         self._handler_installed = True
     
     def _collect_children(self, signum):
@@ -89,7 +89,7 @@ class ProcessSubsystem(Subsystem):
         except OSError:
             pass
     
-    def _windows_check_children(self):
+    def _windows_poll_children(self):
         removed = []
         for pid, proc in self.processes.items():
             if not proc.is_alive():
@@ -107,11 +107,11 @@ class ProcessSubsystem(Subsystem):
                 p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE,
                     stderr = subprocess.PIPE, cwd = cwd, env = env)
             except Exception as ex:
-                dfr.throw(ex)
+                self.reactor.call(dfr.throw, ex)
             else:
                 proc = Process(self.reactor, p, args)
                 self.processes[proc.pid] = proc
-                dfr.set(proc)
+                self.reactor.call(dfr.set, proc)
         self._install_child_handler()
         dfr = Deferred()
         self.reactor.call(spawner)
@@ -127,6 +127,7 @@ class ProcessSubsystem(Subsystem):
         @reactive
         def write_all_stdin():
             yield proc.stdin.write(input)
+            yield proc.stdin.flush()
         if input:
             self.reactor.call(write_all_stdin)
         
