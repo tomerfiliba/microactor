@@ -1,5 +1,6 @@
 import time
 import select
+import errno
 from .base import BasePosixReactor
 from ..base import ReactorError
 
@@ -38,17 +39,20 @@ class SelectReactor(BasePosixReactor):
         if not self._read_transports and not self._write_transports:
             time.sleep(timeout)
             return
-        while True:
-            try:
-                rlst, wlst, _ = select.select(self._read_transports, self._write_transports, [], timeout)
-            except (select.error, EnvironmentError):
+        try:
+            rlst, wlst, _ = select.select(self._read_transports, self._write_transports, [], timeout)
+        except (select.error, EnvironmentError) as ex:
+            if ex.errno == errno.EINTR:
+                pass
+            elif ex.errno == errno.EBADF:
                 self._prune_bad_fds()
             else:
-                break
-        for fd in rlst:
-            self.call(self._read_transports[fd].on_read, -1)
-        for fd in wlst:
-            self.call(self._write_transports[fd].on_write, -1)
+                raise
+        else:
+            for fd in rlst:
+                self.call(self._read_transports[fd].on_read, -1)
+            for fd in wlst:
+                self.call(self._write_transports[fd].on_write, -1)
 
     def _prune_bad_fds(self):
         for transports in [self._read_transports, self._write_transports]:

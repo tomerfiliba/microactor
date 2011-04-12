@@ -46,7 +46,11 @@ class KqueueReactor(PosixPollingReactor):
     
     def _handle_transports(self, timeout):
         self._update_poller()
-        events = self._poller.poll(timeout)
+        try:
+            events = self._poller.poll(timeout)
+        except EnvironmentError as ex:
+            if ex.errno == errno.EINTR:
+                return
         
         for e in events:
             trns, _ = self._registered_with_epoll[e.ident]

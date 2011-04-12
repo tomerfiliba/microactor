@@ -1,4 +1,5 @@
 import select
+import errno
 from .base import PosixPollingReactor
 
 
@@ -22,7 +23,11 @@ class EpollReactor(PosixPollingReactor):
 
     def _handle_transports(self, timeout):
         self._update_poller()
-        events = self._poller.poll(timeout)
+        try:
+            events = self._poller.poll(timeout)
+        except EnvironmentError as ex:
+            if ex.errno == errno.EINTR:
+                return
         
         for fd, flags in events:
             trns, _ = self._transports[fd]

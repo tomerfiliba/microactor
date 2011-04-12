@@ -10,16 +10,17 @@ class Process(object):
         self.reactor = reactor
         self.cmdline = cmdline
         self._proc = proc
-        self.stdin = BufferedTransport(self.reactor.files.wrap_pipe(proc.stdin, "w"))
-        self.stdout = BufferedTransport(self.reactor.files.wrap_pipe(proc.stdout, "r"))
-        self.stderr = BufferedTransport(self.reactor.files.wrap_pipe(proc.stderr, "r"))
+        self.stdin = BufferedTransport(self.reactor._io.wrap_pipe(proc.stdin, "w"))
+        self.stdout = BufferedTransport(self.reactor._io.wrap_pipe(proc.stdout, "r"))
+        self.stderr = BufferedTransport(self.reactor._io.wrap_pipe(proc.stderr, "r"))
         self.pid = proc.pid
         self.waiters_queue = []
     
     def __repr__(self):
         return "<Process %r: %r>" % (self.pid, self.cmdline)
     
-    def on_termination(self):
+    def on_termination(self, pid, sts):
+        self._proc._handle_exitstatus(sts)
         rc = self.returncode
         for dfr in self.waiters_queue:
             self.reactor.call(dfr.set, rc)
@@ -43,6 +44,7 @@ class Process(object):
     def wait(self):
         if not self.is_alive():
             return Deferred(self.returncode)
+        
         dfr = Deferred()
         self.waiters_queue.append(dfr)
         return dfr
@@ -79,13 +81,13 @@ class ProcessSubsystem(Subsystem):
     def _collect_children(self, signum):
         try:
             while True:
-                pid, _ = os.waitpid(-1, os.WNOHANG)
+                pid, sts = os.waitpid(-1, os.WNOHANG)
                 if pid <= 0:
                     break
                 proc = self.processes.pop(pid, None)
                 if not proc:
                     continue
-                self.reactor.call(proc.on_termination)
+                self.reactor.call(proc.on_termination, pid, sts)
         except OSError:
             pass
     
