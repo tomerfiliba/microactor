@@ -1,7 +1,7 @@
 import os
 import signal
 import subprocess
-from microactor.subsystems.base import Subsystem
+from .base import Subsystem
 from microactor.utils import Deferred, reactive, rreturn, BufferedTransport
 
 

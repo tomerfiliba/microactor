@@ -2,9 +2,12 @@ import weakref
 import signal
 from .transports import EventTransport
 from ..base import BaseReactor, ReactorError
+from .subsystems import SPECIFIC_SUBSYSTEMS
 
 
 class BasePosixReactor(BaseReactor):
+    SUBSYSTEMS = BaseReactor.SUBSYSTEMS + SPECIFIC_SUBSYSTEMS
+    
     def __init__(self):
         BaseReactor.__init__(self)
         self._signal_handlers = {}
@@ -76,7 +79,7 @@ class PosixPollingReactor(BasePosixReactor):
         if fd in self._transports:
             trns, mask = self._transports[fd]
             if trns is not transport:
-                raise ReactorError("multiple transports register for the same fd")
+                raise ReactorError("multiple transports registered for the same fd")
         else:
             mask = 0
         self._transports[fd] = (transport, mask | flag)

@@ -1,14 +1,12 @@
 import sys
 import socket
-from microactor.subsystems import Subsystem
+from microactor.subsystems.net import NetSubsystem
 from microactor.utils import Deferred, reactive, rreturn
 from ..transports import (ConnectingSocketTransport, ListeningSocketTransport, 
     TcpStreamTransport, UdpTransport, ConnectedUdpTransport)
 
 
-class NetSubsystem(Subsystem):
-    NAME = "net"
-    
+class PosixNetSubsystem(NetSubsystem):
     def connect_tcp(self, host, port, timeout = None):
         dfr = Deferred()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

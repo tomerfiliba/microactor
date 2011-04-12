@@ -1,6 +1,6 @@
+import time
 from .base import Subsystem
 from microactor.utils import Deferred
-import time
 
 
 class JobSubsystem(Subsystem):
@@ -19,7 +19,7 @@ class JobSubsystem(Subsystem):
             else:
                 dfr.set(res)
         
-        self.reactor.add_job(time.time() + interval, invocation)
+        self.reactor.call_at(time.time() + interval, invocation)
         return dfr
 
     def schedule_every(self, interval, func, *args, **kwargs):
@@ -28,16 +28,16 @@ class JobSubsystem(Subsystem):
             try:
                 res = func(*args, **kwargs)
             except Exception as ex:
-                dfr.throw(ex)
+                self.reactor.call(dfr.throw, ex)
             else:
                 if res is False:
-                    dfr.set()
+                    self.reactor.call(dfr.set)
                 else:
                     ts = t0 + (((time.time() - t0) // interval) + 1) * interval
-                    self.reactor.add_job(ts, invocation)
+                    self.reactor.call_at(ts, invocation)
         
         t0 = time.time()
-        self.reactor.add_job(t0, invocation)
+        self.reactor.call_at(t0, invocation)
         return dfr
 
 

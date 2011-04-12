@@ -29,12 +29,11 @@ class RPCModule(Module):
         self.outgoing = ReactiveQueue()
         self.active = True
         self.service = service
-        self.reactor.call(self.main)
     
     @classmethod
     def over_stdio(cls, reactor, service):
         return cls(reactor, service, reactor.files.stdin, reactor.files.stdout)
-    
+
     @reactive
     def fetch_incoming(self):
         try:

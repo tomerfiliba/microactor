@@ -1,14 +1,12 @@
 import socket
-from microactor.subsystems import Subsystem
+from microactor.subsystems.net import NetSubsystem
 from microactor.utils import Deferred, safe_import, reactive, rreturn
 from ..transports import (ListeningSocketTransport, TcpStreamTransport, 
     UdpTransport)
 win32file = safe_import("win32file")
 
 
-class NetSubsystem(Subsystem):
-    NAME = "net"
-    
+class IocpNetSubsystem(NetSubsystem):
     def connect_tcp(self, host, port):
         def finished(size, overlapped):
             self._keepalive.pop(overlapped)
@@ -63,10 +61,6 @@ class NetSubsystem(Subsystem):
         self.reactor.call(do_open)
         return dfr
     
-    @reactive
-    def resolve(self, hostname):
-        res = yield self.reactor.threading.call(socket.gethostbyname_ex, hostname)
-        rreturn(res)
 
 
 

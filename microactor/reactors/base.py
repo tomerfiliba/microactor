@@ -2,6 +2,7 @@ import time
 import weakref
 from functools import partial
 from microactor.utils.colls import MinHeap
+from microactor.subsystems import GENERIC_SUBSYSTEMS, UnsupportedSubsystemException
 
 
 class ReactorError(Exception):
@@ -10,22 +11,34 @@ class ReactorError(Exception):
 
 class BaseReactor(object):
     MAX_POLLING_TIMEOUT = 0.5
-    SUBSYSTEMS = []
+    SUBSYSTEMS = GENERIC_SUBSYSTEMS
 
     def __init__(self):
         self._callbacks = []
         self._jobs = MinHeap()
         self._active = False
+        self._subsystems = {}
+        self._install_builtin_subsystems()
     
     @classmethod
     def supported(cls):
         return False
 
+    def _install_builtin_subsystems(self):
+        for factory in self.SUBSYSTEMS:
+            if not factory.supported(self):
+                continue
+            self.install_subsystem(factory)
+    
     def install_subsystem(self, factory):
-        subsys = self.factory(weakref.proxy(self.reactor))
+        if not factory.supported(self):
+            raise UnsupportedSubsystemException(factory)
+        subsys = factory(weakref.proxy(self.reactor))
         if hasattr(self, subsys.NAME):
             raise ValueError("subsystem %r masks an existing attribute" % (subsys.NAME,))
         setattr(self, subsys.NAME, subsys)
+        self._subsystems[subsys.NAME] = subsys
+        subsys._init()
 
     #===========================================================================
     # Core
@@ -85,7 +98,7 @@ class BaseReactor(object):
     def call(self, func, *args, **kwargs):
         self._callbacks.append(partial(func, *args, **kwargs))
 
-    def register_job(self, timestamp, func):
+    def call_at(self, timestamp, func):
         self._jobs.push((timestamp, func))
 
     def install_module(self, mod):
