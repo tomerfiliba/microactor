@@ -1,5 +1,5 @@
 from .base import Subsystem
-from microactor.utils import reactive, rreturn
+from microactor.utils import reactive, rreturn, Deferred
 import ssl
 
 
@@ -11,100 +11,40 @@ class TcpServer(object):
         self.backlog = backlog
         self.client_handler = client_handler
         self.listener = None
+        self.active = False
+        self.running_dfr = Deferred()
+        self.closed_dfr = Deferred()
     
     @reactive
     def start(self):
         self.listener = yield self.reactor.net.listen_tcp(self.port, 
             self.bindhost, self.backlog)
+        self.active = True
+        self.bindhost, self.port = self.listener.local_addr
+        self.running_dfr.set()
         try:
-            while True:
+            while self.active:
                 sock = yield self.listener.accept()
                 self.reactor.call(self.client_handler, sock)
-        except Exception:
-            if not self.listener:
-                pass # accept() failed because we closed the listener
+        except Exception as ex:
+            if not self.accept:
+                # accept() failed because we closed the listener
+                self.closed_dfr.set()
             else:
-                raise
+                self.closed_dfr.throw(ex)
+        finally:
+            self.listener.close()
 
     @reactive
     def close(self):
-        if self.listener:
-            listener = self.listener
-            self.listener = None
-            yield listener.close()
-
-
-class SslHandshakeTransport(BaseTransport):
-    def __init__(self, reactor, sslsock, dfr):
-        BaseTransport.__init__(self, reactor)
-        self.sslsock.setblocking(False)
-        self.sslsock = sslsock
-        self.dfr = dfr
-    def close(self):
-        BaseTransport.close(self)
-        self.sslsock.close()
-    def fileno(self):
-        return self.sslsock.fileno()
-    
-    def handshake(self):
-        try:
-            self.sslsock.do_handshake()
-        except ssl.SSLError as ex:
-            errno = ex.args[0]
-            if errno == ssl.SSL_ERROR_WANT_READ:
-                self.reactor.register_read(self)
-            elif errno == ssl.SSL_ERROR_WANT_WRITE:
-                self.reactor.register_write(self)
-            else:
-                raise
-        else:
-            self.dfr.set()
-    
-    def on_read(self, hint):
-        self.reactor.unregister_read(self)
-        self.handshake()
-    
-    def on_write(self, hint):
-        self.reactor.unregister_write(self)
-        self.handshake()
-
-
-class SslListeningSocketTransport(ListeningSocketTransport):
-    @reactive
-    def accept(self):
-        conn = yield ListeningSocketTransport.accept(self)
-        sock = conn.fileobj
-        
-        self.reactor.register_read(self)
-        dfr = Deferred()
-        self.accept_queue.push(dfr)
-        return dfr
+        if self.active:
+            self.active = False
+            yield self.listener.close()
+        yield self.closed_dfr
 
 
 class NetSubsystem(Subsystem):
     NAME = "net"
-    
-    @reactive
-    def connect_ssl(self, host, port, keyfile = None, certfile = None, 
-            ca_certs = None, cert_reqs = ssl.CERT_NONE, ssl_version = ssl.SSLv23):
-        conn = yield self.reactor.tcp.connect(host, port)
-        sock2 = ssl.wrap_socket(conn.fileobj, keyfile = keyfile, certfile = certfile, 
-            ca_certs = ca_certs, cert_reqs = cert_reqs, ssl_version = ssl_version,
-            server_side = False, do_handshake_on_connect = False)
-        dfr = Deferred()
-        trns = SslHandshakeTransport(self.reactor, sock2, dfr)
-        yield dfr
-        rreturn (TcpStreamTransport(self.reactor, sock2))
-    
-    @reactive
-    def listen_ssl(self, port, keyfile, certfile, ca_certs = None, host = "0.0.0.0",
-            backlog = 40, cert_reqs = ssl.CERT_NONE, ssl_version = ssl.SSLv3):
-        listener = yield self.reactor.tcp.listen(port, host, backlog)
-    
-    def serve_tcp(self, port, handler, **kwargs):
-        server = TcpServer(self.reactor, port, handler, **kwargs)
-        self.reactor.call(server.start)
-        return server
     
     @reactive
     def resolve(self, hostname):
@@ -116,6 +56,12 @@ class NetSubsystem(Subsystem):
     
     def connect_tcp(self, *args, **kwargs):
         raise NotImplementedError()
+
+    def listen_ssl(self, *args, **kwargs):
+        raise NotImplementedError()
+    
+    def connect_ssl(self, *args, **kwargs):
+        raise NotImplementedError()
     
     def open_udp(self, *args, **kwargs):
         raise NotImplementedError()
@@ -123,6 +69,12 @@ class NetSubsystem(Subsystem):
     def connect_udp(self, *args, **kwargs):
         raise NotImplementedError()
 
+    @reactive
+    def serve_tcp(self, port, handler, **kwargs):
+        server = TcpServer(self.reactor, port, handler, **kwargs)
+        self.reactor.call(server.start)
+        yield server.running_dfr
+        rreturn(server)
 
 
 

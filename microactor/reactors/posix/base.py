@@ -12,13 +12,16 @@ class BasePosixReactor(BaseReactor):
         BaseReactor.__init__(self)
         self._signal_handlers = {}
         self._wakeup = EventTransport(weakref.proxy(self))
-        self.register_read(self._wakeup)
     
     def _shutdown(self):
         self._wakeup.reset()
     
     def wakeup(self):
         self._wakeup.set()
+    
+    def start(self):
+        self.register_read(self._wakeup)
+        BaseReactor.start(self)
     
     #===========================================================================
     # Transports
@@ -69,10 +72,10 @@ class PosixPollingReactor(BasePosixReactor):
         self._prev_transports = {}
     
     def _shutdown(self):
-        for _, (trns, _) in self._transports:
+        BasePosixReactor._shutdown(self)
+        for _, (trns, _) in self._transports.items():
             trns.close()
         self._transports.clear()
-        BasePosixReactor._shutdown(self)
 
     def _register_transport(self, transport, flag):
         fd = transport.fileno()
@@ -85,7 +88,12 @@ class PosixPollingReactor(BasePosixReactor):
         self._transports[fd] = (transport, mask | flag)
     
     def _unregister_transport(self, transport, flag):
-        fd = transport.fileno()
+        try:
+            fd = transport.fileno()
+        except Exception as ex:
+            # assume fd has been closed
+            self._prune(transport)
+            return
         if fd not in self._transports:
             return
         _, mask = self._transports[fd]
@@ -95,17 +103,23 @@ class PosixPollingReactor(BasePosixReactor):
         else:
             self._transports[fd] = (transport, new_mask)
 
+    def _prune(self, transport):
+        for fd, (trns, _) in self._transports.items():
+            if trns is transport:
+                del self._transports[fd]
+                break
+
     def _update_poller(self):
         for fd, (_, flags) in self._transports.items():
             if fd not in self._prev_transports:
-                self._epoll.register(fd, flags)
+                self._poller.register(fd, flags)
             else:
                 _, prev_flags = self._prev_transports[fd]
                 if flags != prev_flags:
-                    self._epoll.modify(fd, flags)
+                    self._poller.modify(fd, flags)
         for fd in self._prev_transports:
             if fd not in self._transports:
-                self._epoll.unregister(fd)
+                self._poller.unregister(fd)
         self._prev_transports = self._transports.copy()
     
 

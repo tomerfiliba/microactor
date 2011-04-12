@@ -3,9 +3,7 @@ import microactor
 
 @microactor.reactive
 def main(reactor):
-    reactor.call_after(5, lambda job: reactor.stop())
-    
-    listener = yield reactor.tcp.listen(18812)
+    listener = yield reactor.net.listen_tcp(18812)
     print "listener:", listener
     reactor.call(client_main, reactor)
     while True:
@@ -16,7 +14,7 @@ def main(reactor):
 @microactor.reactive
 def client_main(reactor):
     print "client started"
-    conn = yield reactor.tcp.connect("localhost", 18812)
+    conn = yield reactor.net.connect_tcp("localhost", 18812)
     print "client connected", conn
     yield conn.write("hello world")
     data = yield conn.read(10)
@@ -37,8 +35,9 @@ def serve_client(reactor, conn):
 
 
 if __name__ == "__main__":
-    cls = microactor.get_reactor_factory()
-    reactor = cls()
+    reactor = microactor.get_reactor()
+    print reactor
+    reactor.jobs.schedule(5, reactor.stop)
     reactor.run(main)
 
 

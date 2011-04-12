@@ -28,6 +28,7 @@ class ListeningSocketTransport(BaseTransport):
         BaseTransport.__init__(self, reactor)
         sock.setblocking(False)
         self.sock = sock
+        self.local_addr = sock.getsockname()
         self.transport_factory = transport_factory
         self._keepalive = {}
         self._register()

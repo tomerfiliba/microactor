@@ -21,7 +21,10 @@ class TcpStreamTransport(StreamTransport):
         self.peer_addr = sock.getpeername()
     
     def close(self):
-        self.shutdown()
+        try:
+            self.shutdown()
+        except Exception:
+            pass # will fail if fd has been closed
         StreamTransport.close(self)
     
     def shutdown(self, mode = "rw"):
@@ -45,6 +48,7 @@ class ListeningSocketTransport(BaseTransport):
     def __init__(self, reactor, sock, transport_factory):
         BaseTransport.__init__(self, reactor)
         sock.setblocking(False)
+        self.local_addr = sock.getsockname()
         self.sock = sock
         self.transport_factory = transport_factory
         self.accept_queue = Queue()
@@ -227,5 +231,61 @@ class ConnectedUdpTransport(BaseTransport):
             dfr.set(count)
         if not self._write_queue:
             self.reactor.unregister_write(self)
+
+
+class SslHandshakeTransport(BaseTransport):
+    def __init__(self, reactor, sslsock, dfr):
+        BaseTransport.__init__(self, reactor)
+        self.sslsock.setblocking(False)
+        self.sslsock = sslsock
+        self.dfr = dfr
+    def close(self):
+        BaseTransport.close(self)
+        self.sslsock.close()
+    def fileno(self):
+        return self.sslsock.fileno()
+    
+    def handshake(self):
+        try:
+            self.sslsock.do_handshake()
+        except ssl.SSLError as ex:
+            errno = ex.args[0]
+            if errno == ssl.SSL_ERROR_WANT_READ:
+                self.reactor.register_read(self)
+            elif errno == ssl.SSL_ERROR_WANT_WRITE:
+                self.reactor.register_write(self)
+            else:
+                raise
+        else:
+            self.dfr.set()
+    
+    def on_read(self, hint):
+        self.reactor.unregister_read(self)
+        self.handshake()
+    
+    def on_write(self, hint):
+        self.reactor.unregister_write(self)
+        self.handshake()
+
+
+class SslListeningSocketTransport(ListeningSocketTransport):
+    def accept(self):
+        conn = yield ListeningSocketTransport.accept(self)
+        sock = conn.fileobj
+        
+        self.reactor.register_read(self)
+        dfr = Deferred()
+        self.accept_queue.push(dfr)
+        rreturn(dfr)
+
+
+
+
+
+
+
+
+
+
 
 

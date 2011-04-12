@@ -2,7 +2,6 @@ import sys
 import os
 from microactor.subsystems import Subsystem
 from microactor.utils import Deferred, BufferedTransport
-from ..transports.files import FileTransport, PipeTransport
 
 
 class FilesSubsystem(Subsystem):

@@ -1,7 +1,3 @@
-class UnsupportedSubsystemException(Exception):
-    pass
-
-
 class Subsystem(object):
     NAME = None
     

@@ -2,10 +2,12 @@ import time
 import weakref
 from functools import partial
 from microactor.utils.colls import MinHeap
-from microactor.subsystems import GENERIC_SUBSYSTEMS, UnsupportedSubsystemException
+from microactor.subsystems import GENERIC_SUBSYSTEMS
 
 
 class ReactorError(Exception):
+    pass
+class UnsupportedSubsystemException(Exception):
     pass
 
 
@@ -26,14 +28,12 @@ class BaseReactor(object):
 
     def _install_builtin_subsystems(self):
         for factory in self.SUBSYSTEMS:
-            if not factory.supported(self):
-                continue
             self.install_subsystem(factory)
     
     def install_subsystem(self, factory):
         if not factory.supported(self):
             raise UnsupportedSubsystemException(factory)
-        subsys = factory(weakref.proxy(self.reactor))
+        subsys = factory(weakref.proxy(self))
         if hasattr(self, subsys.NAME):
             raise ValueError("subsystem %r masks an existing attribute" % (subsys.NAME,))
         setattr(self, subsys.NAME, subsys)

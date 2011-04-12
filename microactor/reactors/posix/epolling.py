@@ -25,7 +25,7 @@ class EpollReactor(PosixPollingReactor):
         events = self._poller.poll(timeout)
         
         for fd, flags in events:
-            trns, _ = self._registered_with_epoll[fd]
+            trns, _ = self._transports[fd]
             if flags & select.EPOLLIN or flags & select.EPOLLPRI:
                 self.call(trns.on_read, -1)
             if flags & select.EPOLLOUT:

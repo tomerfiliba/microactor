@@ -117,7 +117,7 @@ class EventTransport(BaseTransport):
     def reset(self):
         if not self._is_set:
             return
-        os.read(self._rds, 100)
+        os.read(self._rfd, 100)
         self._is_set = False
 
     def is_set(self):

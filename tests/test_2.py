@@ -1,27 +1,38 @@
 import microactor
-from microactor.modules.http import HttpServer, HttpResponse, HttpError
 
 
-class MyHttpServer(HttpServer):
-    @microactor.reactive
-    def handle_get(self, req):
-        print "!! handle_get", req
-        if req.path != "/" :
-            raise HttpError(404, "Not Found")
-        resp = HttpResponse("<http><body><h1>hello there</h1></body></http>")
-        microactor.rreturn(resp)
+@microactor.reactive
+def main(reactor):
+    server = yield reactor.net.serve_tcp(18812, serve_client)
+    print "listener:", server
+    reactor.call(client_main, reactor)
+
+@microactor.reactive
+def client_main(reactor):
+    print "client started"
+    conn = yield reactor.net.connect_tcp("localhost", 18812)
+    print "client connected", conn
+    yield conn.write("hello world")
+    data = yield conn.read(10)
+    print "client got", repr(data)
+    conn.close()
+
+@microactor.reactive
+def serve_client(conn):
+    print "servering client", conn
+    while True:
+        data = yield conn.read(10)
+        if not data:
+            print "client disconnected"
+            break
+        print "server got", repr(data)
+        yield conn.write("foobar!")
+    conn.close()
 
 
 if __name__ == "__main__":
-    import signal
     reactor = microactor.get_reactor()
-    @microactor.reactive
-    def shutdown(*args):
-        yield server.stop()
-        reactor.stop()
-    reactor.register_signal(signal.SIGINT, shutdown)
-    reactor.call_after(50, shutdown)
-    server = MyHttpServer("/tmp", 8080)
-    reactor.call(server.start, reactor)
-    reactor.start()
+    reactor.jobs.schedule(5, reactor.stop)
+    reactor.run(main)
+
 
