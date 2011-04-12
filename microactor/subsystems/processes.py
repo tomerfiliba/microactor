@@ -19,8 +19,7 @@ class Process(object):
     def __repr__(self):
         return "<Process %r: %r>" % (self.pid, self.cmdline)
     
-    def on_termination(self, pid, sts):
-        self._proc._handle_exitstatus(sts)
+    def on_termination(self):
         rc = self.returncode
         for dfr in self.waiters_queue:
             self.reactor.call(dfr.set, rc)
@@ -87,7 +86,9 @@ class ProcessSubsystem(Subsystem):
                 proc = self.processes.pop(pid, None)
                 if not proc:
                     continue
-                self.reactor.call(proc.on_termination, pid, sts)
+                # hack: need to call Popen._handle_exitstatus manually
+                proc._proc._handle_exitstatus(sts)
+                self.reactor.call(proc.on_termination)
         except OSError:
             pass
     
@@ -122,9 +123,8 @@ class ProcessSubsystem(Subsystem):
     @reactive
     def run(self, args, input = None, retcodes = (0,), cwd = None, env = None):
         proc = yield self.spawn(args, cwd, env)
-        
-        stdout_data = [""]
-        stderr_data = [""]
+        stdout_dfr = Deferred()
+        stderr_dfr = Deferred()
 
         @reactive
         def write_all_stdin():
@@ -135,17 +135,19 @@ class ProcessSubsystem(Subsystem):
         
         @reactive
         def read_all_stdout():
-            stdout_data[0] = yield proc.stdout.read_all()
+            data = yield proc.stdout.read_all()
+            self.reactor.call(stdout_dfr.set, data)
         self.reactor.call(read_all_stdout)
         
         @reactive
         def read_all_stderr():
-            stderr_data[0] = yield proc.stderr.read_all()
+            data = yield proc.stderr.read_all()
+            self.reactor.call(stderr_dfr.set, data)
         self.reactor.call(read_all_stderr)
         
         rc = yield proc.wait()
-        stdout_data = stdout_data[0]
-        stderr_data = stderr_data[0]
+        stdout_data = yield stdout_dfr
+        stderr_data = yield stderr_dfr
 
         if retcodes and rc not in retcodes:
             raise ValueError("process failed", rc, stdout_data, stderr_data)

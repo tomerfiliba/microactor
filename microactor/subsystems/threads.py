@@ -44,15 +44,15 @@ class ThreadingSubsystem(Subsystem):
         return len(self._workers)
     
     def _spawn_workers(self):
-        if len(self._tasks) <= len(self._workers):
+        if self._tasks.qsize() <= len(self._workers):
             return
         if len(self._workers) >= self._max_workers:
             return
-        needed = min(len(self._tasks) - len(self._workers), self._max_workers)
+        needed = min(self._tasks.qsize() - len(self._workers), self._max_workers)
         for _ in range(needed):
             tid = self.ID_GENERATOR.next()
             thd = threading.Thread(name = "worker-%d" % (tid,), target = self._worker_thread, args = (tid,))
-            thd.setDaemon()
+            thd.setDaemon(True)
             self._workers[tid] = thd
             thd.start()
     
@@ -76,7 +76,7 @@ class ThreadingSubsystem(Subsystem):
         
         dfr = Deferred()
         thd = threading.Thread(target = nonpooled_task)
-        thd.setDaemon()
+        thd.setDaemon(True)
         thd.start()
         return dfr
 

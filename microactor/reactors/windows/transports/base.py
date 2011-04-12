@@ -1,6 +1,5 @@
 from microactor.utils import safe_import, Deferred
 win32file = safe_import("win32file")
-msvcrt = safe_import("msvcrt")
 
 
 class BaseTransport(object):
@@ -19,8 +18,8 @@ class BaseTransport(object):
 
 
 class StreamTransport(BaseTransport):
-    WRITE_SIZE = 32000
-    READ_SIZE = 32000
+    MAX_WRITE_SIZE = 32000
+    MAX_READ_SIZE = 32000
     __slots__ = ["fileobj", "_keepalive"]
     
     def __init__(self, reactor, fileobj):
@@ -31,7 +30,7 @@ class StreamTransport(BaseTransport):
     def close(self):
         self.fileobj.close()
     def fileno(self):
-        return msvcrt.get_osfhandle(self.fileobj.fileno())
+        return self.fileobj.fileno()
     
     def _get_read_overlapped(self):
         return win32file.OVERLAPPED()

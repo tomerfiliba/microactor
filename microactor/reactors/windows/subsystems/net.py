@@ -7,6 +7,9 @@ win32file = safe_import("win32file")
 
 
 class IocpNetSubsystem(NetSubsystem):
+    def _init(self):
+        self._keepalive = {}
+    
     def connect_tcp(self, host, port):
         def finished(size, overlapped):
             self._keepalive.pop(overlapped)
@@ -16,6 +19,7 @@ class IocpNetSubsystem(NetSubsystem):
             if is_exc:
                 dfr.throw(value)
                 return
+            print (value, port)
             win32file.ConnectEx(sock.fileno(), (value, port), overlapped)
         
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

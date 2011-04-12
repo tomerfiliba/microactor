@@ -1,6 +1,6 @@
+import socket
 from .base import Subsystem
 from microactor.utils import reactive, rreturn, Deferred
-import ssl
 
 
 class TcpServer(object):
@@ -47,8 +47,13 @@ class NetSubsystem(Subsystem):
     NAME = "net"
     
     @reactive
-    def resolve(self, hostname):
+    def resolve_ex(self, hostname):
         res = yield self.reactor.threading.call(socket.gethostbyname_ex, hostname)
+        rreturn(res)
+
+    @reactive
+    def resolve(self, hostname):
+        res = yield self.reactor.threading.call(socket.gethostbyname, hostname)
         rreturn(res)
     
     def listen_tcp(self, *args, **kwargs):

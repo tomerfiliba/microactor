@@ -1,7 +1,10 @@
+import itertools
 import ctypes
 import socket # to initialize winsock
+import msvcrt
 import win32file
 import win32con
+
 
 if not hasattr(win32file, "CreateIoCompletionPort"):
     raise ImportError("win32file is missing CreateIoCompletionPort")
@@ -16,9 +19,9 @@ class IOCP(object):
         return "IOCP(%r)" % (self._port,)
     def register(self, handle):
         """registers the given handle with the IOCP. the handle cannot be 
-        unregistered"""
+        unregistered later"""
         if hasattr(handle, "fileno"):
-            handle = handle.fileno()
+            handle = msvcrt.get_osfhandle(handle.fileno())
         key = self._key.next()
         win32file.CreateIoCompletionPort(handle, self._port, key, 0)
         return key

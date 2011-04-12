@@ -1,11 +1,11 @@
 import socket
 from .base import BaseTransport, StreamTransport
-from microactor.utils import Deferred, safe_import
+from microactor.utils import Deferred, safe_import, reactive
 win32file = safe_import("win32file")
 
 
 class TcpStreamTransport(StreamTransport):
-    __slots__ = ["local_addr", "peer_addr"]
+    __slots__ = ["_local_addr", "_peer_addr"]
     _SHUTDOWN_MAP = {
         "r" : socket.SHUT_RD, 
         "w" : socket.SHUT_WR, 
@@ -15,23 +15,50 @@ class TcpStreamTransport(StreamTransport):
     def __init__(self, reactor, sock):
         StreamTransport.__init__(self, reactor, sock)
         sock.setblocking(False)
-        self.local_addr = sock.getsockname()
-        self.peer_addr = sock.getpeername()
+        self._local_addr = None
+        self._peer_addr = None
+    
+    @reactive
+    def close(self):
+        try:
+            self.shutdown()
+        except EnvironmentError:
+            pass
+        yield StreamTransport.close(self)
+
+    @property
+    def local_addr(self):
+        if not self._local_addr:
+            self._local_addr = self.fileobj.getsockname()
+        return self._local_addr
+    
+    @property
+    def peer_addr(self):
+        if not self._peer_addr:
+            self._peer_addr = self.fileobj.getpeername()
+        return self._peer_addr
 
     def shutdown(self, mode = "rw"):
         mode2 = self._SHUTDOWN_MAP[mode]
         self.fileobj.shutdown(mode2)
-        
+
 
 class ListeningSocketTransport(BaseTransport):
     def __init__(self, reactor, sock, transport_factory):
         BaseTransport.__init__(self, reactor)
         sock.setblocking(False)
         self.sock = sock
-        self.local_addr = sock.getsockname()
+        self._local_addr = None
         self.transport_factory = transport_factory
         self._keepalive = {}
         self._register()
+
+    @property
+    def local_addr(self):
+        if not self._local_addr:
+            self._local_addr = self.sock.getsockname()
+        return self._local_addr
+
     def close(self):
         self.sock.close()
     def fileno(self):

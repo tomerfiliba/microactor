@@ -23,12 +23,12 @@ class WrappedStreamTransport(object):
     #    return getattr(self.transport, name)
     
     def on_read(self, hint):
-        raise AssertionError("cannot active on_read")
+        raise AssertionError("cannot call on_read")
     def on_write(self, hint):
-        raise AssertionError("cannot active on_write")
+        raise AssertionError("cannot call on_write")
     def on_error(self, hint):
-        raise AssertionError("cannot active on_error")
-    
+        raise AssertionError("cannot call on_error")
+
 
 class BufferedTransport(WrappedStreamTransport):
     def __init__(self, transport, read_buffer_size = 16000, write_buffer_size = 16000):
