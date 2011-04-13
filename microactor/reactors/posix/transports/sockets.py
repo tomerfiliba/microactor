@@ -1,13 +1,38 @@
 import socket
 import errno
 import sys
-from .base import BaseTransport, StreamTransport
-from microactor.utils.deferred import Deferred
+from .base import BaseTransport, StreamTransport, NeedMoreData
+from microactor.utils import Deferred, reactive, rreturn, safe_import
 from microactor.utils.colls import Queue
+ssl = safe_import("ssl")
 
 
-class TcpStreamTransport(StreamTransport):
-    __slots__ = ["local_addr", "peer_addr"]
+
+class BaseSocketTransport(BaseTransport):
+    __slots__ = ["sock"]
+    def __init__(self, reactor, sock):
+        BaseTransport.__init__(self, reactor)
+        self.sock = sock
+        self.sock.setblocking(False)
+    def detach(self):
+        self._unregister()
+        self.sock = None
+    def close(self):
+        if self.sock is None:
+            return
+        self._unregister()
+        self.sock.close()
+        self.sock = None
+    def fileno(self):
+        return self.sock.fileno()
+
+
+#===============================================================================
+# Stream Sockets
+#===============================================================================
+
+class StreamSocketTransport(StreamTransport):
+    __slots__ = ["_local_addr", "_peer_addr"]
     _SHUTDOWN_MAP = {
         "r" : socket.SHUT_RD, 
         "w" : socket.SHUT_WR, 
@@ -17,9 +42,21 @@ class TcpStreamTransport(StreamTransport):
     def __init__(self, reactor, sock):
         StreamTransport.__init__(self, reactor, sock)
         sock.setblocking(False)
-        self.local_addr = sock.getsockname()
-        self.peer_addr = sock.getpeername()
+        self._local_addr = None
+        self._peer_addr = None
+
+    @property
+    def local_addr(self):
+        if not self._local_addr:
+            self._local_addr = self.fileobj.getsockname()
+        return self._local_addr
     
+    @property
+    def peer_addr(self):
+        if not self._peer_addr:
+            self._peer_addr = self.fileobj.getpeername()
+        return self._peer_addr
+        
     def close(self):
         try:
             self.shutdown()
@@ -44,20 +81,19 @@ class TcpStreamTransport(StreamTransport):
         return self.fileobj.send(data)
 
 
-class ListeningSocketTransport(BaseTransport):
+class ListeningSocketTransport(BaseSocketTransport):
     def __init__(self, reactor, sock, transport_factory):
-        BaseTransport.__init__(self, reactor)
-        sock.setblocking(False)
-        self.local_addr = sock.getsockname()
-        self.sock = sock
+        BaseSocketTransport.__init__(self, reactor, sock)
+        self._local_addr = None
         self.transport_factory = transport_factory
         self.accept_queue = Queue()
+
+    @property
+    def local_addr(self):
+        if not self._local_addr:
+            self._local_addr = self.fileobj.getsockname()
+        return self._local_addr
     
-    def close(self):
-        self._unregister()
-        self.sock.close()
-    def fileno(self):
-        return self.sock.fileno()
     def accept(self):
         self.reactor.register_read(self)
         dfr = Deferred()
@@ -70,30 +106,22 @@ class ListeningSocketTransport(BaseTransport):
         dfr.set(trns)
 
 
-class ConnectingSocketTransport(BaseTransport):
-    def __init__(self, reactor, sock, addr, deferred, transport_factory):
-        BaseTransport.__init__(self, reactor)
-        self.sock = sock
+class ConnectingSocketTransport(BaseSocketTransport):
+    def __init__(self, reactor, sock, addr):
+        BaseSocketTransport.__init__(self, reactor, sock)
         self.addr = addr
-        self.deferred = deferred
-        self.connected = False
-        self.transport_factory = transport_factory
-    
-    def close(self):
-        self._unregister()
-        self.sock.close()
-    def fileno(self):
-        return self.sock.fileno()
-    
+        self.connected_dfr = Deferred()
+
     def connect(self, timeout):
         if timeout is not None:
-            self.reactor.call_after(timeout, self._cancel)
+            self.reactor.jobs.schedule(timeout, self._cancel)
         self.reactor.register_write(self)
         self.sock.setblocking(False)
         self._attempt_connect()
+        return self.connected_dfr
     
     def _attempt_connect(self):
-        if self.deferred.is_set():
+        if self.connected_dfr.is_set():
             self._unregister()
             return
         err = self.sock.connect_ex(self.addr)
@@ -104,38 +132,31 @@ class ConnectingSocketTransport(BaseTransport):
         
         self.reactor.unregister_write(self)
         if err in (0, errno.EISCONN):
-            trns = self.transport_factory(self.reactor, self.sock)
-            self.deferred.set(trns)
+            self.connected_dfr.set()
         else:
-            self.deferred.throw(socket.error(err, errno.errorcode[err]))
+            self.connected_dfr.throw(socket.error(err, errno.errorcode[err]))
     
     def on_write(self, hint):
         self._attempt_connect()
     
     def _cancel(self, job):
-        if self.deferred.is_set():
+        if self.connected_dfr.is_set():
             return
         self.close()
-        self.deferred.throw(socket.timeout("connection timed out"))
+        self.connected_dfr.throw(socket.timeout("connection timed out"))
 
+#===============================================================================
+# UDP
+#===============================================================================
 
-class UdpTransport(BaseTransport):
-    __slots__ = ["_sock", "_read_queue", "_write_queue"]
+class UdpTransport(BaseSocketTransport):
     MAX_UDP_PACKET_SIZE = 8192
     
     def __init__(self, reactor, sock):
-        BaseTransport.__init__(self, reactor)
-        sock.setblocking(False)
-        self._sock = sock
+        BaseSocketTransport.__init__(self, reactor, sock)
         self._read_queue = Queue()
         self._write_queue = Queue()
-        
-    def close(self):
-        self._unregister()
-        self._sock.close()
-    def fileno(self):
-        return self._sock.fileno()
-    
+
     def sendto(self, host, port, data):
         if len(data) > self.MAX_UDP_PACKET_SIZE:
             raise ValueError("data too long")
@@ -157,7 +178,7 @@ class UdpTransport(BaseTransport):
         if hint < 0:
             hint = self.MAX_UDP_PACKET_SIZE
         try:
-            data, (host, port) = self._sock.recvfrom(hint)
+            data, (host, port) = self.sock.recvfrom(hint)
         except Exception as ex:
             dfr.throw(ex)
         else:
@@ -168,7 +189,7 @@ class UdpTransport(BaseTransport):
     def on_write(self, hint):
         dfr, addr, data = self._write_queue.pop()
         try:
-            count = self._sock.sendto(data, addr)
+            count = self.sock.sendto(data, addr)
         except Exception as ex:
             dfr.throw(ex)
         else:
@@ -177,21 +198,12 @@ class UdpTransport(BaseTransport):
             self.reactor.unregister_write(self)
 
 
-class ConnectedUdpTransport(BaseTransport):
-    __slots__ = ["_sock", "_read_queue", "_write_queue"]
-
+class ConnectedUdpTransport(BaseSocketTransport):
     def __init__(self, reactor, sock):
-        BaseTransport.__init__(self, reactor)
-        self._sock = sock
+        BaseSocketTransport.__init__(self, reactor, sock)
         self._read_queue = Queue()
         self._write_queue = Queue()
         
-    def close(self):
-        self._unregister()
-        self._sock.close()
-    def fileno(self):
-        return self._sock.fileno()
-    
     def send(self, data):
         if len(data) > UdpTransport.MAX_UDP_PACKET_SIZE:
             raise ValueError("data too long")
@@ -213,7 +225,7 @@ class ConnectedUdpTransport(BaseTransport):
         if hint < 0:
             hint = UdpTransport.MAX_UDP_PACKET_SIZE
         try:
-            data = self._sock.recv(hint)
+            data = self.sock.recv(hint)
         except Exception as ex:
             dfr.throw(ex)
         else:
@@ -224,7 +236,7 @@ class ConnectedUdpTransport(BaseTransport):
     def on_write(self, hint):
         dfr, data = self._write_queue.pop()
         try:
-            count = self._sock.send(data)
+            count = self.sock.send(data)
         except Exception as ex:
             dfr.throw(ex)
         else:
@@ -232,59 +244,82 @@ class ConnectedUdpTransport(BaseTransport):
         if not self._write_queue:
             self.reactor.unregister_write(self)
 
+#===============================================================================
+# SSL
+#===============================================================================
 
-class SslHandshakeTransport(BaseTransport):
-    def __init__(self, reactor, sslsock, dfr):
-        BaseTransport.__init__(self, reactor)
-        self.sslsock.setblocking(False)
-        self.sslsock = sslsock
-        self.dfr = dfr
-    def close(self):
-        BaseTransport.close(self)
-        self.sslsock.close()
-    def fileno(self):
-        return self.sslsock.fileno()
+class StreamSslTransport(StreamSocketTransport):
+    __slots__ = []
     
-    def handshake(self):
+    def getpeercert(self, binary_form = False):
+        return self.fileobj.getpeercert(binary)
+    
+    def unwrap(self):
+        s = self.fileobj.unwrap()
+        self.detach()
+        return StreamSocketTransport(self.reactor, s)
+
+    def _do_read(self, count):
         try:
-            self.sslsock.do_handshake()
+            return self.fileobj.recv(count)
         except ssl.SSLError as ex:
-            errno = ex.args[0]
-            if errno == ssl.SSL_ERROR_WANT_READ:
-                self.reactor.register_read(self)
-            elif errno == ssl.SSL_ERROR_WANT_WRITE:
-                self.reactor.register_write(self)
+            if ex.errno == ssl.SSL_ERROR_WANT_READ:
+                raise NeedMoreData
+            elif ex.errno == ssl.SSL_ERROR_EOF:
+                return "" # EOF
             else:
                 raise
+        except socket.error as ex:
+            if ex.errno in (errno.ECONNRESET, errno.ECONNABORTED):
+                return ""  # EOF
+            else:
+                raise
+
+
+
+class SslHandshakingTransport(BaseSocketTransport):
+    def __init__(self, reactor, sslsock):
+        BaseSocketTransport.__init__(self, reactor, sslsock)
+        self.connected_dfr = Deferred()
+    
+    def handshake(self):
+        if not self.connected_dfr.is_set():
+            self._handshake()
+        return self.connected_dfr
+    
+    def _handshake(self):
+        try:
+            self.sock.do_handshake()
+        except ssl.SSLError as ex:
+            if ex.errno == ssl.SSL_ERROR_WANT_READ:
+                self.reactor.register_read(self)
+            elif ex.errno == ssl.SSL_ERROR_WANT_WRITE:
+                self.reactor.register_write(self)
+            else:
+                self.connected_dfr.throw(ex)
         else:
-            self.dfr.set()
+            trns = StreamSslTransport(self.reactor, self.sock)
+            self.detach()
+            self.connected_dfr.set(trns)
     
     def on_read(self, hint):
         self.reactor.unregister_read(self)
-        self.handshake()
+        self._handshake()
     
     def on_write(self, hint):
         self.reactor.unregister_write(self)
-        self.handshake()
+        self._handshake()
 
 
-class SslListeningSocketTransport(ListeningSocketTransport):
+class ListeningSslTransport(ListeningSocketTransport):
+    def __init__(self, reactor, sock):
+        ListeningSocketTransport.__init__(self, reactor, sock, SslHandshakingTransport)
+    
+    @reactive
     def accept(self):
-        conn = yield ListeningSocketTransport.accept(self)
-        sock = conn.fileobj
-        
-        self.reactor.register_read(self)
-        dfr = Deferred()
-        self.accept_queue.push(dfr)
-        rreturn(dfr)
-
-
-
-
-
-
-
-
+        handshaking_trns = yield ListeningSocketTransport.accept()
+        trns = yield handshaking_trns.handshake()
+        rreturn(trns)
 
 
 

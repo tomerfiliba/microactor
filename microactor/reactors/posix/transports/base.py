@@ -4,6 +4,12 @@ from microactor.utils.colls import Queue
 from io import BytesIO
 
 
+
+class TransportError(Exception):
+    pass
+class NeedMoreData(TransportError):
+    pass
+
 class BaseTransport(object):
     __slots__ = ["reactor"]
     def __init__(self, reactor):
@@ -11,6 +17,8 @@ class BaseTransport(object):
     def _unregister(self):
         self.reactor.unregister_read(self)
         self.reactor.unregister_write(self)
+    def detach(self):
+        raise NotImplementedError()
     def close(self):
         raise NotImplementedError()
     def fileno(self):
@@ -27,26 +35,41 @@ class BaseTransport(object):
 class StreamTransport(BaseTransport):
     WRITE_SIZE = 16000
     READ_SIZE = 16000
-    __slots__ = ["fileobj", "_write_queue", "_read_queue"]
+    __slots__ = ["fileobj", "_write_queue", "_read_queue", "_eof"]
     
     def __init__(self, reactor, fileobj):
         BaseTransport.__init__(self, reactor)
         self.fileobj = fileobj
         self._write_queue = Queue()
         self._read_queue = Queue()
+        self._eof = False
+    def detach(self):
+        self._unregister()
+        self.fileobj = None
     def close(self):
+        if not self.fileobj:
+            return
         self._unregister()
         self.fileobj.close()
+        self.fileobj = None
     def fileno(self):
+        if not self.fileobj:
+            raise TransportError("stale transport")
         return self.fileobj.fileno()
     
     def write(self, data):
+        if not self.fileobj:
+            raise TransportError("stale transport")
         dfr = Deferred()
         self._write_queue.push((dfr, BytesIO(data), len(data)))
         self.reactor.register_write(self)
         return dfr
     
     def read(self, count):
+        if not self.fileobj:
+            raise TransportError("stale transport")
+        if self._eof:
+            return Deferred("")
         dfr = Deferred()
         self._read_queue.push((dfr, count))
         self.reactor.register_read(self)
@@ -55,15 +78,25 @@ class StreamTransport(BaseTransport):
     def on_read(self, hint):
         if hint < 0:
             hint = self.READ_SIZE
-        dfr, count = self._read_queue.pop()
+        dfr, count = self._read_queue.peek()
         try:
             data = self._do_read(min(count, hint))
+        except NeedMoreData:
+            # don't pop from _read_queue
+            pass
         except Exception as ex:
+            self._read_queue.pop()
             dfr.throw(ex)
         else:
+            self._read_queue.pop()
             dfr.set(data)
+            if not data:
+                self._eof = True
+                while self._read_queue:
+                    dfr, _ = self._read_queue.pop()
+                    dfr.set("")
         
-        if not self._read_queue:
+        if not self._read_queue or self._eof:
             self.reactor.unregister_read(self)
 
     def _do_read(self, count):

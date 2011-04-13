@@ -28,9 +28,10 @@ class PollReactor(PosixPollingReactor):
             if ex.errno == errno.EINTR:
                 return
         
+        READ_MASK = select.POLLIN | select.POLLPRI | select.POLLHUP
         for fd, flags in events:
             trns, _ = self._registered_with_epoll[fd]
-            if flags & select.POLLIN or flags & select.POLLPRI:
+            if flags & READ_MASK:
                 self.call(trns.on_read, -1)
             if flags & select.POLLOUT:
                 self.call(trns.on_write, -1)

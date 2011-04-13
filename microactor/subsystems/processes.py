@@ -32,7 +32,6 @@ class Process(object):
     def is_alive(self):
         return self._proc.poll() is None
     
-    @reactive
     def signal(self, sig):
         self._proc.send_signal(sig)
     
@@ -70,6 +69,7 @@ class ProcessSubsystem(Subsystem):
         if self._handler_installed:
             return
         if hasattr(signal, "SIGCHLD"):
+            # POSIX: rely on sigchld
             self.reactor.register_signal(signal.SIGCHLD, self._collect_children)
         else:
             # windows doesn't have sigchld, so let's just poll the process list
@@ -136,13 +136,13 @@ class ProcessSubsystem(Subsystem):
         @reactive
         def read_all_stdout():
             data = yield proc.stdout.read_all()
-            self.reactor.call(stdout_dfr.set, data)
+            stdout_dfr.set(data)
         self.reactor.call(read_all_stdout)
         
         @reactive
         def read_all_stderr():
             data = yield proc.stderr.read_all()
-            self.reactor.call(stderr_dfr.set, data)
+            stderr_dfr.set(data)
         self.reactor.call(read_all_stderr)
         
         rc = yield proc.wait()

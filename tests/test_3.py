@@ -4,9 +4,7 @@ import microactor
 @microactor.reactive
 def main(reactor):
     rc, stdout, stderr = yield reactor.proc.run(["/bin/ls"])
-    print rc
-    print repr(stdout)
-    print repr(stderr)
+    print "got:", repr(stdout)
 
 
 if __name__ == "__main__":

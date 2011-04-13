@@ -1,8 +1,8 @@
 from microactor.utils import reactive, rreturn
 
 
-class WrappedStreamTransport(object):
-    __slots__ = ["transport"]
+class StreamTransportAdapter(object):
+    __slots__ = ["transport", "reactor"]
     
     def __init__(self, transport):
         self.reactor = transport.reactor
@@ -17,22 +17,10 @@ class WrappedStreamTransport(object):
     def read(self, count):
         return self.transport.read(count)
 
-    #def __getattr__(self, name):
-    #    if name.startswith("_"):
-    #        raise AttributeError(name)
-    #    return getattr(self.transport, name)
-    
-    def on_read(self, hint):
-        raise AssertionError("cannot call on_read")
-    def on_write(self, hint):
-        raise AssertionError("cannot call on_write")
-    def on_error(self, hint):
-        raise AssertionError("cannot call on_error")
 
-
-class BufferedTransport(WrappedStreamTransport):
+class BufferedTransport(StreamTransportAdapter):
     def __init__(self, transport, read_buffer_size = 16000, write_buffer_size = 16000):
-        WrappedStreamTransport.__init__(self, transport)
+        StreamTransportAdapter.__init__(self, transport)
         self._rbufsize = read_buffer_size
         self._wbufsize = write_buffer_size
         self._rbuf = ""
@@ -84,14 +72,14 @@ class BufferedTransport(WrappedStreamTransport):
     
     @reactive
     def read_all(self, chunk = 16000):
+        chunks = [self._rbuf]
+        self._rbuf = ""
         while True:
             data = yield self.transport.read(chunk)
             if not data:
                 break
-            self._rbuf += data
-        data = self._rbuf
-        self._rbuf = ""
-        rreturn(data)
+            chunks.append(data)
+        rreturn("".join(chunks))
     
     @reactive
     def read_until(self, pattern, raise_on_eof = False):
@@ -115,9 +103,9 @@ class BufferedTransport(WrappedStreamTransport):
                 last_index = len(self._rbuf) - len(pattern)
     
     @reactive
-    def read_line(self):
+    def read_line(self, remove_crlf = True):
         data = self.read_until("\n")
-        if data.endswith("\r"):
+        if remove_crlf and data.endswith("\r"):
             # discard CR in CR+LF
             data = data[:-1]
         rreturn(data)
@@ -135,9 +123,9 @@ class BufferedTransport(WrappedStreamTransport):
             yield self.flush()
 
 
-class BoundTransport(WrappedStreamTransport):
+class BoundTransport(StreamTransportAdapter):
     def __init__(self, transport, read_length, write_length, skip_on_close = True, close_underlying = True):
-        WrappedStreamTransport.__init__(self, transport)
+        StreamTransportAdapter.__init__(self, transport)
         self._rlength = read_length
         self._wlength = write_length
         self.skip_on_close = skip_on_close

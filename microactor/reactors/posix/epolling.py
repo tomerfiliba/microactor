@@ -29,12 +29,13 @@ class EpollReactor(PosixPollingReactor):
             if ex.errno == errno.EINTR:
                 return
         
+        READ_MASK = select.EPOLLIN | select.EPOLLPRI | select.EPOLLHUP
         for fd, flags in events:
             trns, _ = self._transports[fd]
-            if flags & select.EPOLLIN or flags & select.EPOLLPRI:
+            if flags & READ_MASK:
                 self.call(trns.on_read, -1)
             if flags & select.EPOLLOUT:
                 self.call(trns.on_write, -1)
-            if flags & select.EPOLLERR or flags & select.EPOLLHUP:
+            if flags & select.EPOLLERR:
                 self.call(trns.on_error, None)
 
