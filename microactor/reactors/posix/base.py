@@ -1,8 +1,9 @@
 import weakref
 import signal
-from .transports import EventTransport
+from .transports import WakeupTransport
 from ..base import BaseReactor, ReactorError
 from .subsystems import SPECIFIC_SUBSYSTEMS
+import errno
 
 
 class BasePosixReactor(BaseReactor):
@@ -11,7 +12,7 @@ class BasePosixReactor(BaseReactor):
     def __init__(self):
         BaseReactor.__init__(self)
         self._signal_handlers = {}
-        self._wakeup = EventTransport(weakref.proxy(self))
+        self._wakeup = WakeupTransport(weakref.proxy(self))
     
     def _shutdown(self):
         self._wakeup.reset()
@@ -66,6 +67,9 @@ class BasePosixReactor(BaseReactor):
 
 
 class PosixPollingReactor(BasePosixReactor):
+    REGISTER_READ_MASK = NotImplemented
+    REGISTER_WRITE_MASK = NotImplemented
+    
     def __init__(self):
         BasePosixReactor.__init__(self)
         self._transports = {}
@@ -103,6 +107,15 @@ class PosixPollingReactor(BasePosixReactor):
         else:
             self._transports[fd] = (transport, new_mask)
 
+    def register_read(self, transport):
+        self._register_transport(transport, self.REGISTER_READ_MASK)
+    def register_write(self, transport):
+        self._register_transport(transport, self.REGISTER_WRITE_MASK)
+    def unregister_read(self, transport):
+        self._unregister_transport(transport, self.REGISTER_READ_MASK)
+    def unregister_write(self, transport):
+        self._unregister_transport(transport, self.REGISTER_WRITE_MASK)
+
     def _prune(self, transport):
         for fd, (trns, _) in self._transports.items():
             if trns is transport:
@@ -121,6 +134,17 @@ class PosixPollingReactor(BasePosixReactor):
             if fd not in self._transports:
                 self._poller.unregister(fd)
         self._prev_transports = self._transports.copy()
+    
+    def _get_events(self, timeout):
+        self._update_poller()
+        try:
+            events = self._poller.poll(timeout)
+        except EnvironmentError as ex:
+            if getattr(ex, "errno", ex.args[0]) == errno.EINTR:
+                return ()
+            else:
+                raise
+        return events
     
 
 

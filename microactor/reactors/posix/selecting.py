@@ -12,12 +12,14 @@ class SelectReactor(BasePosixReactor):
         self._write_transports = {}
 
     def register_read(self, transport):
+        print "register_read", transport
         fd = transport.fileno()
         if fd in self._read_transports and self._read_transports[fd] is not transport:
             raise ReactorError("multiple transports register for the same fd")
         self._read_transports[fd] = transport
     
     def register_write(self, transport):
+        print "register_write", transport
         fd = transport.fileno()
         if fd in self._write_transports and self._write_transports[fd] is not transport:
             raise ReactorError("multiple transports register for the same fd")
@@ -36,15 +38,16 @@ class SelectReactor(BasePosixReactor):
         return hasattr(select, "select")
     
     def _handle_transports(self, timeout):
+        print "SelectReactor._handle_transports timeout =", timeout
         if not self._read_transports and not self._write_transports:
             time.sleep(timeout)
             return
         try:
             rlst, wlst, _ = select.select(self._read_transports, self._write_transports, [], timeout)
         except (select.error, EnvironmentError) as ex:
-            if ex.errno == errno.EINTR:
+            if ex.args[0] == errno.EINTR:
                 pass
-            elif ex.errno == errno.EBADF:
+            elif ex.args[0] == errno.EBADF:
                 self._prune_bad_fds()
             else:
                 raise

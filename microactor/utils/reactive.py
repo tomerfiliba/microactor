@@ -1,6 +1,7 @@
 from types import GeneratorType
 from .deferred import Deferred
-from microactor.reactors import get_reactor
+import microactor.reactors
+
 
 class ReactiveReturn(Exception):
     def __init__(self, value):
@@ -32,7 +33,7 @@ def reactive(func):
                         dfr.register(continuation)
                 break
         
-        retval = Deferred(get_reactor())
+        retval = Deferred(microactor.reactors.get_reactor())
         try:
             gen = func(*args, **kwargs)
         except (GeneratorExit, StopIteration):
@@ -48,12 +49,6 @@ def reactive(func):
                 gen.register(lambda is_exc, value: retval.set(value, is_exc))
             else:
                 retval.set(gen)
-        
-        #def print_traceback(is_exc, value):
-        #    if is_exc:
-        #        for tb in getattr(value, "_inner_tb", ()):
-        #            print >>sys.stderr, tb + "\n"
-        #retval.register(print_traceback)
         return retval
     
     return wrapper

@@ -3,33 +3,21 @@ from .base import PosixPollingReactor
 
 
 class PollReactor(PosixPollingReactor):
+    REGISTER_READ_MASK = getattr(select, "POLLIN", NotImplemented)
+    REGISTER_WRITE_MASK = getattr(select, "POLLOUT", NotImplemented)
+
     def __init__(self):
         PosixPollingReactor.__init__(self)
         self._poller = select.poll()
-
-    def register_read(self, transport):
-        self._register_transport(transport, select.POLLIN)
-    def register_write(self, transport):
-        self._register_transport(transport, select.POLLOUT)
-    def unregister_read(self, transport):
-        self._unregister_transport(transport, select.POLLIN)
-    def unregister_write(self, transport):
-        self._unregister_transport(transport, select.POLLOUT)
 
     @classmethod
     def supported(cls):
         return hasattr(select, "poll")
 
     def _handle_transports(self, timeout):
-        self._update_poller()
-        try:
-            events = self._poller.poll(timeout)
-        except EnvironmentError as ex:
-            if ex.errno == errno.EINTR:
-                return
-        
         READ_MASK = select.POLLIN | select.POLLPRI | select.POLLHUP
-        for fd, flags in events:
+        
+        for fd, flags in self._get_events(timeout):
             trns, _ = self._registered_with_epoll[fd]
             if flags & READ_MASK:
                 self.call(trns.on_read, -1)

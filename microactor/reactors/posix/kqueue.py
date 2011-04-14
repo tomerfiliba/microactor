@@ -32,32 +32,19 @@ class KqueuePoller(object):
         return self._kqueue.control(None, maxevents, timeout)
 
 class KqueueReactor(PosixPollingReactor):
+    REGISTER_READ_MASK = POLLIN
+    REGISTER_WRITE_MASK = POLLOUT
+    
     def __init__(self):
         PosixPollingReactor.__init__(self)
         self._poller = KqueuePoller()
-    
-    def register_read(self, transport):
-        self._register_transport(transport, POLLIN)
-    def register_write(self, transport):
-        self._register_transport(transport, POLLOUT)
-    def unregister_read(self, transport):
-        self._unregister_transport(transport, POLLIN)
-    def unregister_write(self, transport):
-        self._unregister_transport(transport, POLLOUT)
     
     @classmethod
     def supported(cls):
         return hasattr(select, "kqueue")
     
     def _handle_transports(self, timeout):
-        self._update_poller()
-        try:
-            events = self._poller.poll(timeout)
-        except EnvironmentError as ex:
-            if ex.errno == errno.EINTR:
-                return
-        
-        for e in events:
+        for e in self._get_events(timeout):
             trns, _ = self._registered_with_epoll[e.ident]
             if e.filter == select.KQ_FILTER_READ:
                 self.call(trns.on_read, -1)

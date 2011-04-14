@@ -1,3 +1,5 @@
+import sys
+import socket
 import os
 from microactor.utils import Deferred
 from microactor.utils.colls import Queue
@@ -123,7 +125,7 @@ class StreamTransport(BaseTransport):
         return self.fileobj.write(count)
 
 
-class EventTransport(BaseTransport):
+class PipeWakeupTransport(BaseTransport):
     def __init__(self, reactor, auto_reset = True):
         BaseTransport.__init__(self, reactor)
         self._rfd, self._wfd = os.pipe()
@@ -161,8 +163,53 @@ class EventTransport(BaseTransport):
             self.reset()
 
 
+class SocketWakeupTransport(BaseTransport):
+    def __init__(self, reactor, auto_reset = True):
+        BaseTransport.__init__(self, reactor)
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("localhost", 0))
+        listener.listen(1)
+        self.wsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.wsock.connect(listener.getsockname())
+        self.rsock, _ = listener.accept()
+        listener.close()
+        self._is_set = False
+        self.auto_reset = auto_reset
+    
+    def close(self):
+        if self.rsock is None:
+            return
+        self.rsock.close()
+        self.wsock.close()
+        self.rsock = None
+        self.wsock = None
+    
+    def fileno(self):
+        return self.rsock.fileno()
+    
+    def set(self):
+        if self._is_set:
+            return
+        self._is_set = True
+        self.wsock.send("x")
+    
+    def reset(self):
+        if not self._is_set:
+            return
+        self.rsock.recv(100)
+        self._is_set = False
 
+    def is_set(self):
+        return self._is_set
+    
+    def on_read(self, hint):
+        if self.auto_reset:
+            self.reset()
 
+if sys.platform == "win32":
+    WakeupTransport = SocketWakeupTransport
+else:
+    WakeupTransport = PipeWakeupTransport
 
 
 
