@@ -22,7 +22,7 @@ class BaseReactor(object):
         self._active = False
         self._subsystems = {}
         self._install_builtin_subsystems()
-        self.started = Deferred()
+        self.started = Deferred(self.reactor)
     
     @classmethod
     def supported(cls):
@@ -58,7 +58,7 @@ class BaseReactor(object):
             self._work()
         self._shutdown()
         self._handle_callbacks()
-        self.started = Deferred()
+        self.started = Deferred(self.reactor)
     
     def _shutdown(self):
         raise NotImplementedError()

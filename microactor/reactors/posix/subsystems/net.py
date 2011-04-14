@@ -5,31 +5,30 @@ from microactor.subsystems.net import NetSubsystem
 from microactor.utils import Deferred, reactive, rreturn
 from ..transports import (ConnectingSocketTransport, ListeningSocketTransport, 
     StreamSocketTransport, UdpTransport, ConnectedUdpTransport, 
-    SslHandshakingTransport, StreamSslTransport)
+    SslHandshakingTransport, ListeningSslTransport)
 
 
 class PosixNetSubsystem(NetSubsystem):
     
     @reactive
     def connect_tcp(self, host, port, timeout = None):
+        yield self.reactor.started
         addr = yield self.resolve(host)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         trns = ConnectingSocketTransport(self.reactor, sock, (addr, port))
         yield trns.connect(timeout)
         rreturn(StreamSocketTransport(self.reactor, sock))
     
+    @reactive
     def listen_tcp(self, port, host = "0.0.0.0", backlog = 40):
-        def do_listen():
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.setblocking(False)
-            if sys.platform != "win32":
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind((host, port))
-            sock.listen(backlog)
-            self.reactor.call(dfr.set, ListeningSocketTransport(self.reactor, sock, StreamSocketTransport))
-        dfr = Deferred()
-        self.reactor.call(do_listen)
-        return dfr
+        yield self.reactor.started
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setblocking(False)
+        if sys.platform != "win32":
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+        sock.listen(backlog)
+        rreturn(ListeningSocketTransport(self.reactor, sock, StreamSocketTransport))
 
     @classmethod
     def _open_udp_sock(cls, host, port, broadcast):
@@ -47,11 +46,11 @@ class PosixNetSubsystem(NetSubsystem):
             try:
                 sock = self._open_udp_sock(host, port, broadcast)
             except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
+                dfr.throw(ex)
             else:
-                self.reactor.call(dfr.set, UdpTransport(self.reactor, sock))
+                dfr.set(UdpTransport(self.reactor, sock))
         
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         self.reactor.call(do_open)
         return dfr
 
@@ -61,11 +60,11 @@ class PosixNetSubsystem(NetSubsystem):
                 sock = self._open_udp_sock("0.0.0.0", 0, False)
                 sock.connect((host, port))
             except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
+                dfr.throw(ex)
             else:
-                self.reactor.call(dfr.set, ConnectedUdpTransport(self.reactor, sock))
+                dfr.set(ConnectedUdpTransport(self.reactor, sock))
         
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         self.reactor.call(do_open)
         return dfr
 
@@ -103,7 +102,7 @@ class PosixNetSubsystem(NetSubsystem):
             ssl_version = ssl_version, server_side = True, 
             do_handshake_on_connect = False)
         
-        trns = ListeningSslTransport(self.reactor, sock)
+        trns = ListeningSslTransport(self.reactor, sslsock)
         rreturn(trns)
     
     @reactive
@@ -111,7 +110,7 @@ class PosixNetSubsystem(NetSubsystem):
             ca_certs = None, cert_reqs = ssl.CERT_NONE, ssl_version = ssl.PROTOCOL_SSLv23):
         
         listener = yield self.listen_tcp(port, host, backlog)
-        ssl_listener = wrap_ssl_server(listen_tcp, keyfile, certfile, 
+        ssl_listener = self.wrap_ssl_server(listener, keyfile, certfile, 
             ca_certs = ca_certs, cert_reqs = cert_reqs, ssl_version = ssl_version)
         rreturn(ssl_listener)
 

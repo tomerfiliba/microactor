@@ -20,15 +20,20 @@ def get_reactor_factory():
             return cls
     raise UnsupportedReactor("none of the available reactors is supported on this platform")
 
+the_reactor = None
+
 def get_reactor(name = None):
+    global the_reactor
+    if the_reactor:
+        return the_reactor
     if name:
         factory = REACTORS[name]
     else:
         factory = get_reactor_factory()
     if not factory.supported():
         raise UnsupportedReactor("%r is not supported on this platform" % (factory,))
-    reactor = factory()
-    return reactor
+    the_reactor = factory()
+    return the_reactor
 
 
 

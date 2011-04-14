@@ -32,7 +32,7 @@ class PipeTransport(StreamTransport):
     
     def flush(self):
         if self._flush_dfr is None:
-            self._flush_dfr = Deferred()
+            self._flush_dfr = Deferred(self.reactor)
             self.reactor.register_write(self)
         return self._flush_dfr
 
@@ -43,7 +43,7 @@ class PipeTransport(StreamTransport):
         StreamTransport._do_write(self, data)
         if self.auto_flush or self._flush_dfr:
             self.fileobj.flush()
-            self.reactor.call(self._flush_dfr.set)
+            self._flush_dfr.set()
             self._flush_dfr = None
 
 

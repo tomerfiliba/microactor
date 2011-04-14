@@ -14,14 +14,14 @@ class IocpNetSubsystem(NetSubsystem):
     def connect_tcp(self, host, port):
         yield self.reactor.started
         addr = yield self.resolve(host)
-        trns_dfr = Deferred()
+        trns_dfr = Deferred(self.reactor)
         
         print "connect_tcp: trns_dfr =", trns_dfr
         
         def finished(size, overlapped):
             print "connect_tcp: ConnectEx finished"
             self._keepalive.pop(overlapped)
-            self.reactor.call(trns_dfr.set, StreamSocketTransport(self.reactor, sock))
+            trns_dfr.set(StreamSocketTransport(self.reactor, sock))
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(('0.0.0.0', 0)) # ConnectEx requires the socket to be bound
@@ -60,11 +60,11 @@ class IocpNetSubsystem(NetSubsystem):
             try:
                 sock = self._open_udp_sock(host, port, broadcast)
             except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
+                dfr.throw(ex)
             else:
-                self.reactor.call(dfr.set, UdpTransport(self.reactor, sock))
+                dfr.set(UdpTransport(self.reactor, sock))
         
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         self.reactor.call(do_open)
         return dfr
     

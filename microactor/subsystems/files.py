@@ -1,7 +1,8 @@
 import sys
 import os
 from microactor.subsystems import Subsystem
-from microactor.utils import Deferred, BufferedTransport
+from microactor.utils import Deferred, BufferedTransport, reactive
+from microactor.utils.reactive import rreturn
 
 
 class FilesSubsystem(Subsystem):
@@ -30,42 +31,29 @@ class FilesSubsystem(Subsystem):
             self._stderr = self.reactor._io.wrap_pipe(sys.stderr, "w")
         return self._stderr
     
+    @reactive
     def open(self, path, mode = "rt", buffering = False):
-        def opener():
-            try:
-                fileobj = open(path, mode)
-            except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
-                return
-            mode2 = ""
-            if "r" in mode or "+" in mode:
-                mode2 += "r"
-            if "a" in mode or "+" in mode:
-                mode2 += "w"
-            trns = self.reactor._io.wrap_file(fileobj, mode2)
-            if buffering:
-                trns = BufferedTransport(trns)
-            self.reactor.call(dfr.set, trns)
-        
-        dfr = Deferred()
-        self.reactor.call(opener)
-        return dfr
+        yield self.reactor.started
+        fileobj = open(path, mode)
+        mode2 = ""
+        if "r" in mode or "+" in mode:
+            mode2 += "r"
+        if "a" in mode or "+" in mode:
+            mode2 += "w"
+        trns = self.reactor._io.wrap_file(fileobj, mode2)
+        if buffering:
+            trns = BufferedTransport(trns)
+        rreturn(trns)
 
+    @reactive
     def open_pipes(self, buffered = False):
         """returns a (read-pipe, write-pipe) pair of transports"""
-        def opener():
-            try:
-                rfd, wfd = os.pipe()
-            except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
-            else:
-                rtrns = self.reactor._io.wrap_pipe(os.fdopen(rfd, "r"), "r")
-                wtrns = self.reactor._io.wrap_pipe(os.fdopen(wfd, "w"), "w")
-                self.reactor.call(dfr.set, (rtrns, wtrns))
-        
-        dfr = Deferred()
-        self.reactor.call(opener)
-        return dfr
+        yield self.reactor.started
+        rfd, wfd = os.pipe()
+        rtrns = self.reactor._io.wrap_pipe(os.fdopen(rfd, "r"), "r")
+        wtrns = self.reactor._io.wrap_pipe(os.fdopen(wfd, "w"), "w")
+        rreturn((rtrns, wtrns))
+
 
 
 

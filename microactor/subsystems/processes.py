@@ -22,7 +22,7 @@ class Process(object):
     def on_termination(self):
         rc = self.returncode
         for dfr in self.waiters_queue:
-            self.reactor.call(dfr.set, rc)
+            dfr.set(rc)
         del self.waiters_queue[:]
     
     @property
@@ -41,9 +41,9 @@ class Process(object):
     
     def wait(self):
         if not self.is_alive():
-            return Deferred(self.returncode)
+            return Deferred(self.reactor, self.returncode)
         
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         self.waiters_queue.append(dfr)
         return dfr
 
@@ -110,21 +110,21 @@ class ProcessSubsystem(Subsystem):
                 p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE,
                     stderr = subprocess.PIPE, cwd = cwd, env = env)
             except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
+                dfr.throw(ex)
             else:
                 proc = Process(self.reactor, p, args)
                 self.processes[proc.pid] = proc
-                self.reactor.call(dfr.set, proc)
+                dfr.set(proc)
         self._install_child_handler()
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         self.reactor.call(spawner)
         return dfr
     
     @reactive
     def run(self, args, input = None, retcodes = (0,), cwd = None, env = None):
         proc = yield self.spawn(args, cwd, env)
-        stdout_dfr = Deferred()
-        stderr_dfr = Deferred()
+        stdout_dfr = Deferred(self.reactor)
+        stderr_dfr = Deferred(self.reactor)
 
         @reactive
         def write_all_stdin():
@@ -136,13 +136,13 @@ class ProcessSubsystem(Subsystem):
         @reactive
         def read_all_stdout():
             data = yield proc.stdout.read_all()
-            self.reactor.call(stdout_dfr.set, data)
+            stdout_dfr.set(data)
         self.reactor.call(read_all_stdout)
         
         @reactive
         def read_all_stderr():
             data = yield proc.stderr.read_all()
-            self.reactor.call(stderr_dfr.set, data)
+            stderr_dfr.set(data)
         self.reactor.call(read_all_stderr)
         
         rc = yield proc.wait()

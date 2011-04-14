@@ -43,15 +43,15 @@ class StreamTransport(BaseTransport):
         def finished(size, overlapped):
             self._keepalive.pop(overlapped)
             data = str(buf[:size])
-            self.reactor.call(dfr.set, data)
+            dfr.set(data)
         
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         try:
             overlapped = self._get_read_overlapped()
             buf = win32file.AllocateReadBuffer(count)
             win32file.ReadFile(self.fileno(), buf, overlapped)
         except Exception as ex:
-            self.reactor.call(dfr.throw, ex)
+            dfr.throw(ex)
         else:
             overlapped.object = finished
             self._keepalive[overlapped] = finished
@@ -62,14 +62,14 @@ class StreamTransport(BaseTransport):
         
         def write_more():
             if not remaining[0]:
-                self.reactor.call(dfr.set)
+                dfr.set()
                 return
             chunk = remaining[0][:self.MAX_WRITE_SIZE]
             try:
                 overlapped = self._get_write_overlapped()
                 win32file.WriteFile(self.fileno(), chunk, overlapped)
             except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
+                dfr.throw(ex)
             else:
                 overlapped.object = finished
                 self._keepalive[overlapped] = finished
@@ -78,11 +78,11 @@ class StreamTransport(BaseTransport):
             self._keepalive.pop(overlapped)
             remaining[0] = remaining[0][size:]
             if not remaining[0]:
-                self.reactor.call(dfr.set)
+                dfr.set()
             else:
                 write_more()
 
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         write_more()
         return dfr
     

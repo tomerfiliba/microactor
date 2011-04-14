@@ -67,9 +67,9 @@ class ListeningSocketTransport(BaseTransport):
     def accept(self):
         def finished(size, overlapped):
             self._keepalive.pop(overlapped)
-            self.reactor.call(dfr.set, trns)
+            dfr.set(trns)
         
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         overlapped = win32file.OVERLAPPED()
         overlapped.object = finished
         self._keepalive[overlapped] = finished

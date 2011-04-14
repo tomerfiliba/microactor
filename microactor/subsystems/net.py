@@ -12,8 +12,8 @@ class TcpServer(object):
         self.client_handler = client_handler
         self.listener = None
         self.active = False
-        self.running_dfr = Deferred()
-        self.closed_dfr = Deferred()
+        self.running_dfr = Deferred(self.reactor)
+        self.closed_dfr = Deferred(self.reactor)
     
     @reactive
     def start(self):
@@ -21,7 +21,7 @@ class TcpServer(object):
             self.bindhost, self.backlog)
         self.active = True
         self.bindhost, self.port = self.listener.local_addr
-        self.reactor.call(self.running_dfr.set)
+        self.running_dfr.set()
         try:
             while self.active:
                 sock = yield self.listener.accept()
@@ -29,9 +29,9 @@ class TcpServer(object):
         except Exception as ex:
             if not self.accept:
                 # accept() failed because we closed the listener
-                self.reactor.call(self.closed_dfr.set)
+                self.closed_dfr.set()
             else:
-                self.reactor.call(self.closed_dfr.throw, ex)
+                self.closed_dfr.throw(ex)
         finally:
             self.listener.close()
 

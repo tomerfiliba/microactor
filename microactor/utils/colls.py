@@ -64,7 +64,8 @@ class SynchronizedQueue(object):
 
 class ReactiveQueue(object):
     """a reactive queue"""
-    def __init__(self):
+    def __init__(self, reactor):
+        self.reactor = reactor
         self.data_queue = Queue()
         self.waiters_queue = Queue()
     def __len__(self):
@@ -79,60 +80,12 @@ class ReactiveQueue(object):
     def pop(self):
         """returns a Deferred that will hold the popped item, when one is 
         available"""
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         if self.queue:
             dfr.set(self.data_queue.pop())
         else:
             self.waiters_queue.push(dfr)
         return dfr
-
-
-
-
-if __name__ == "__main__":
-    import time
-
-    q = ThreadSafeQueue()
-    q.push(500)
-    
-    def f(name):
-        for i in range(5):
-            print "%s waiting\n" % (name,),
-            x = q.pop()
-            print "%s got %r\n" % (name, x),
-    threading.Thread(target = f, args=("T1",)).start()
-    threading.Thread(target = f, args=("T2",)).start()
-    threading.Thread(target = f, args=("T3",)).start()
-
-    q.push(501)
-    q.push(502)
-    q.push(503)
-    q.push(504)   
-    q.push(505)
-    time.sleep(2)
-    q.push(506)
-    q.push(507)
-    time.sleep(2)
-    q.push(508)
-    q.push(509)
-    q.push(510)
-    q.push(511)
-    q.push(512)
-    q.push(513)
-    q.push(514)
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

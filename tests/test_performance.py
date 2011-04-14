@@ -20,7 +20,7 @@ def main(reactor):
 def no_reactor():
     t0 = time.time()
     s = socket.socket()
-    s.connect(("www.google.com", 443))
+    s.connect(("www.google.com", 80))
     s.send("GET / HTTP/1.1\r\nHost:www.google.com\r\n\r\n")
     data = s.recv(1000)
     s.close()

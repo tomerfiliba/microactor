@@ -25,9 +25,9 @@ class ThreadingSubsystem(Subsystem):
                 try:
                     res = func(*args, **kwargs)
                 except Exception as ex:
-                    self.reactor.call(dfr.throw, ex)
+                    dfr.throw(ex)
                 else:
-                    self.reactor.call(dfr.set, res)
+                    dfr.set(res)
         finally:
             self._workers.pop(id, None)
     
@@ -58,7 +58,7 @@ class ThreadingSubsystem(Subsystem):
     
     def call(self, func, *args, **kwargs):
         """enqueues the given task into the thread pool, returns a deferred"""
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         self._tasks.put((func, args, kwargs, dfr))
         self._spawn_workers()
         return dfr
@@ -70,11 +70,11 @@ class ThreadingSubsystem(Subsystem):
             try:
                 res = func(*args, **kwargs)
             except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
+                dfr.throw(ex)
             else:
-                self.reactor.call(dfr.set, res)
+                dfr.set(res)
         
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         thd = threading.Thread(target = nonpooled_task)
         thd.setDaemon(True)
         thd.start()

@@ -10,28 +10,28 @@ class JobSubsystem(Subsystem):
         return self.schedule(interval, lambda: None)
     
     def schedule(self, interval, func, *args, **kwargs):
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         def invocation():
             try:
                 res = func(*args, **kwargs)
             except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
+                dfr.throw(ex)
             else:
-                self.reactor.call(dfr.set, res)
+                dfr.set(res)
         
         self.reactor.call_at(time.time() + interval, invocation)
         return dfr
 
     def schedule_every(self, interval, func, *args, **kwargs):
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         def invocation():
             try:
                 res = func(*args, **kwargs)
             except Exception as ex:
-                self.reactor.call(dfr.throw, ex)
+                dfr.throw(ex)
             else:
                 if res is False:
-                    self.reactor.call(dfr.set)
+                    dfr.set()
                 else:
                     ts = t0 + (((time.time() - t0) // interval) + 1) * interval
                     self.reactor.call_at(ts, invocation)

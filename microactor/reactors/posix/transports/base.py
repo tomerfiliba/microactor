@@ -60,7 +60,7 @@ class StreamTransport(BaseTransport):
     def write(self, data):
         if not self.fileobj:
             raise TransportError("stale transport")
-        dfr = Deferred()
+        dfr = Deferred(self.reactor)
         self._write_queue.push((dfr, BytesIO(data), len(data)))
         self.reactor.register_write(self)
         return dfr
@@ -69,8 +69,8 @@ class StreamTransport(BaseTransport):
         if not self.fileobj:
             raise TransportError("stale transport")
         if self._eof:
-            return Deferred("")
-        dfr = Deferred()
+            return Deferred(self.reactor, "")
+        dfr = Deferred(self.reactor)
         self._read_queue.push((dfr, count))
         self.reactor.register_read(self)
         return dfr
@@ -86,15 +86,15 @@ class StreamTransport(BaseTransport):
             pass
         except Exception as ex:
             self._read_queue.pop()
-            self.reactor.call(dfr.throw, ex)
+            dfr.throw(ex)
         else:
             self._read_queue.pop()
-            self.reactor.call(dfr.set, data)
+            dfr.set(data)
             if not data:
                 self._eof = True
                 while self._read_queue:
                     dfr, _ = self._read_queue.pop()
-                    self.reactor.call(dfr.set, "")
+                    dfr.set("")
         
         if not self._read_queue or self._eof:
             self.reactor.unregister_read(self)
@@ -110,12 +110,12 @@ class StreamTransport(BaseTransport):
         try:
             written = self._do_write(data)
         except Exception as ex:
-            self.reactor.call(dfr.throw, ex)
+            dfr.throw(ex)
         else:
             if written is not None:
                 stream.seek(written - len(data), 1)
             if stream.tell() >= size:
-                self.reactor.call(dfr.set)
+                dfr.set()
         if not self._write_queue:
             self.reactor.unregister_write(self)
 

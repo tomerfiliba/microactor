@@ -1,7 +1,6 @@
-import sys
 from types import GeneratorType
 from .deferred import Deferred
- 
+from microactor.reactors import get_reactor
 
 class ReactiveReturn(Exception):
     def __init__(self, value):
@@ -9,19 +8,6 @@ class ReactiveReturn(Exception):
 
 def rreturn(value = None):
     raise ReactiveReturn(value)
-
-#class TimedOut(Exception):
-#    pass
-
-#def timed(reactor, timeout, dfr):
-#    def cancel(job):
-#        if not dfr.is_set():
-#            dfr.register(lambda *args: dfr.cancel())
-#            reactor.call(dfr.throw, TimedOut())
-#    reactor.schedule(timeout, cancel)
-
-#def parallel(reactor, func, *args, **kwargs):
-#    return reactor.call(func, args, kwargs)
 
 def reactive(func):
     def wrapper(*args, **kwargs):
@@ -46,7 +32,7 @@ def reactive(func):
                         dfr.register(continuation)
                 break
         
-        retval = Deferred()
+        retval = Deferred(get_reactor())
         try:
             gen = func(*args, **kwargs)
         except (GeneratorExit, StopIteration):
