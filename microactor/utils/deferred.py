@@ -1,17 +1,17 @@
 import sys
 import itertools
-import traceback
-import inspect
+#import traceback
+#import inspect
 
 
 class DeferredAlreadySet(Exception):
     pass
 
 
-def format_stack():
-    frames = inspect.stack()[1:]
-    return traceback.format_list((f[1], f[2], f[3], f[4][f[5]]) 
-        for f in reversed(frames))
+#def format_stack():
+#    frames = inspect.stack()[1:]
+#    return traceback.format_list((f[1], f[2], f[3], f[4][f[5]]) 
+#        for f in reversed(frames))
 
 
 class Deferred(object):
@@ -45,13 +45,13 @@ class Deferred(object):
         for func in self._callbacks:
             func(is_exc, value)
     def throw(self, exc, with_traceback = True):
-        if with_traceback:
-            tbtext = "".join(traceback.format_exception(*sys.exc_info()))
-            tbtext += "\nfrom:\n" + "".join(format_stack())
-            if not hasattr(exc, "_inner_tb"):
-                exc._inner_tb = [tbtext]
-            else:
-                exc._inner_tb.append(tbtext)
+        #if with_traceback:
+        #    tbtext = "".join(traceback.format_exception(*sys.exc_info()))
+        #    tbtext += "\nfrom:\n" + "".join(format_stack())
+        #    if not hasattr(exc, "_inner_tb"):
+        #        exc._inner_tb = [tbtext]
+        #    else:
+        #        exc._inner_tb.append(tbtext)
         self.set(exc, True)
     def cancel(self, exc = None):
         if self.cancelled:

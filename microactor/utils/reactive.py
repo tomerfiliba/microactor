@@ -10,18 +10,18 @@ class ReactiveReturn(Exception):
 def rreturn(value = None):
     raise ReactiveReturn(value)
 
-class TimedOut(Exception):
-    pass
+#class TimedOut(Exception):
+#    pass
 
-def timed(reactor, timeout, dfr):
-    def cancel(job):
-        if not dfr.is_set():
-            dfr.register(lambda *args: dfr.cancel())
-            reactor.call(dfr.throw, TimedOut())
-    reactor.schedule(timeout, cancel)
+#def timed(reactor, timeout, dfr):
+#    def cancel(job):
+#        if not dfr.is_set():
+#            dfr.register(lambda *args: dfr.cancel())
+#            reactor.call(dfr.throw, TimedOut())
+#    reactor.schedule(timeout, cancel)
 
-def parallel(reactor, func, *args, **kwargs):
-    return reactor.call(func, args, kwargs)
+#def parallel(reactor, func, *args, **kwargs):
+#    return reactor.call(func, args, kwargs)
 
 def reactive(func):
     def wrapper(*args, **kwargs):
@@ -63,11 +63,11 @@ def reactive(func):
             else:
                 retval.set(gen)
         
-        def print_traceback(is_exc, value):
-            if is_exc:
-                for tb in getattr(value, "_inner_tb", ()):
-                    print >>sys.stderr, tb + "\n"
-        retval.register(print_traceback)
+        #def print_traceback(is_exc, value):
+        #    if is_exc:
+        #        for tb in getattr(value, "_inner_tb", ()):
+        #            print >>sys.stderr, tb + "\n"
+        #retval.register(print_traceback)
         return retval
     
     return wrapper
