@@ -136,13 +136,13 @@ class ProcessSubsystem(Subsystem):
         @reactive
         def read_all_stdout():
             data = yield proc.stdout.read_all()
-            stdout_dfr.set(data)
+            self.reactor.call(stdout_dfr.set, data)
         self.reactor.call(read_all_stdout)
         
         @reactive
         def read_all_stderr():
             data = yield proc.stderr.read_all()
-            stderr_dfr.set(data)
+            self.reactor.call(stderr_dfr.set, data)
         self.reactor.call(read_all_stderr)
         
         rc = yield proc.wait()

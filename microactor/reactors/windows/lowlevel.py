@@ -4,6 +4,7 @@ import socket # to initialize winsock
 import msvcrt
 import win32file
 import win32con
+import pywintypes
 
 
 if not hasattr(win32file, "CreateIoCompletionPort"):
@@ -21,7 +22,11 @@ class IOCP(object):
         """registers the given handle with the IOCP. the handle cannot be 
         unregistered later"""
         if hasattr(handle, "fileno"):
-            handle = msvcrt.get_osfhandle(handle.fileno())
+            handle = handle.fileno()
+            try:
+                handle = msvcrt.get_osfhandle(handle)
+            except IOError:
+                pass
         key = self._key.next()
         win32file.CreateIoCompletionPort(handle, self._port, key, 0)
         return key
@@ -55,6 +60,9 @@ def WSASendTo():
 
 def WSARecvFrom():
     _init_winsockdll()
+
+
+
 
 
 

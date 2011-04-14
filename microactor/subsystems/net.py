@@ -21,7 +21,7 @@ class TcpServer(object):
             self.bindhost, self.backlog)
         self.active = True
         self.bindhost, self.port = self.listener.local_addr
-        self.running_dfr.set()
+        self.reactor.call(self.running_dfr.set)
         try:
             while self.active:
                 sock = yield self.listener.accept()
@@ -29,9 +29,9 @@ class TcpServer(object):
         except Exception as ex:
             if not self.accept:
                 # accept() failed because we closed the listener
-                self.closed_dfr.set()
+                self.reactor.call(self.closed_dfr.set)
             else:
-                self.closed_dfr.throw(ex)
+                self.reactor.call(self.closed_dfr.throw, ex)
         finally:
             self.listener.close()
 

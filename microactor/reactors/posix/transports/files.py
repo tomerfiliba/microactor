@@ -43,7 +43,7 @@ class PipeTransport(StreamTransport):
         StreamTransport._do_write(self, data)
         if self.auto_flush or self._flush_dfr:
             self.fileobj.flush()
-            self._flush_dfr.set()
+            self.reactor.call(self._flush_dfr.set)
             self._flush_dfr = None
 
 

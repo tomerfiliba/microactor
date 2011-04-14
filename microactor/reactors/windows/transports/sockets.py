@@ -4,7 +4,7 @@ from microactor.utils import Deferred, safe_import, reactive
 win32file = safe_import("win32file")
 
 
-class TcpStreamTransport(StreamTransport):
+class StreamSocketTransport(StreamTransport):
     __slots__ = ["_local_addr", "_peer_addr"]
     _SHUTDOWN_MAP = {
         "r" : socket.SHUT_RD, 
@@ -67,7 +67,7 @@ class ListeningSocketTransport(BaseTransport):
     def accept(self):
         def finished(size, overlapped):
             self._keepalive.pop(overlapped)
-            dfr.set(trns)
+            self.reactor.call(dfr.set, trns)
         
         dfr = Deferred()
         overlapped = win32file.OVERLAPPED()

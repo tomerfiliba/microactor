@@ -3,6 +3,7 @@ import weakref
 from functools import partial
 from microactor.utils.colls import MinHeap
 from microactor.subsystems import GENERIC_SUBSYSTEMS
+from microactor.utils import Deferred
 
 
 class ReactorError(Exception):
@@ -21,6 +22,7 @@ class BaseReactor(object):
         self._active = False
         self._subsystems = {}
         self._install_builtin_subsystems()
+        self.started = Deferred()
     
     @classmethod
     def supported(cls):
@@ -51,10 +53,12 @@ class BaseReactor(object):
         if self._active:
             raise ReactorError("reactor already running")
         self._active = True
+        self.started.set()
         while self._active:
             self._work()
         self._shutdown()
         self._handle_callbacks()
+        self.started = Deferred()
     
     def _shutdown(self):
         raise NotImplementedError()
@@ -71,6 +75,8 @@ class BaseReactor(object):
     def _work(self):
         now = time.time()
         timeout = self._handle_jobs(now)
+        if self._callbacks:
+            timeout = 0
         self._handle_transports(min(timeout, self.MAX_POLLING_TIMEOUT))
         self._handle_callbacks()
 

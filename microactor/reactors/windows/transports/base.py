@@ -51,7 +51,7 @@ class StreamTransport(BaseTransport):
             buf = win32file.AllocateReadBuffer(count)
             win32file.ReadFile(self.fileno(), buf, overlapped)
         except Exception as ex:
-            dfr.throw(ex)
+            self.reactor.call(dfr.throw, ex)
         else:
             overlapped.object = finished
             self._keepalive[overlapped] = finished

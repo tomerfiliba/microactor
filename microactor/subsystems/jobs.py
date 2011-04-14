@@ -15,9 +15,9 @@ class JobSubsystem(Subsystem):
             try:
                 res = func(*args, **kwargs)
             except Exception as ex:
-                dfr.throw(ex)
+                self.reactor.call(dfr.throw, ex)
             else:
-                dfr.set(res)
+                self.reactor.call(dfr.set, res)
         
         self.reactor.call_at(time.time() + interval, invocation)
         return dfr

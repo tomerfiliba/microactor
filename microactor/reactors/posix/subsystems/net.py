@@ -26,7 +26,7 @@ class PosixNetSubsystem(NetSubsystem):
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((host, port))
             sock.listen(backlog)
-            dfr.set(ListeningSocketTransport(self.reactor, sock, StreamSocketTransport))
+            self.reactor.call(dfr.set, ListeningSocketTransport(self.reactor, sock, StreamSocketTransport))
         dfr = Deferred()
         self.reactor.call(do_listen)
         return dfr
@@ -47,9 +47,9 @@ class PosixNetSubsystem(NetSubsystem):
             try:
                 sock = self._open_udp_sock(host, port, broadcast)
             except Exception as ex:
-                dfr.throw(ex)
+                self.reactor.call(dfr.throw, ex)
             else:
-                dfr.set(UdpTransport(self.reactor, sock))
+                self.reactor.call(dfr.set, UdpTransport(self.reactor, sock))
         
         dfr = Deferred()
         self.reactor.call(do_open)
@@ -61,9 +61,9 @@ class PosixNetSubsystem(NetSubsystem):
                 sock = self._open_udp_sock("0.0.0.0", 0, False)
                 sock.connect((host, port))
             except Exception as ex:
-                dfr.throw(ex)
+                self.reactor.call(dfr.throw, ex)
             else:
-                dfr.set(ConnectedUdpTransport(self.reactor, sock))
+                self.reactor.call(dfr.set, ConnectedUdpTransport(self.reactor, sock))
         
         dfr = Deferred()
         self.reactor.call(do_open)

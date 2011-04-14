@@ -1,11 +1,11 @@
 import time
-import itertools
 from ..base import BaseReactor
+from microactor.utils import MissingModule
 from .subsystems import SPECIFIC_SUBSYSTEMS
 try:
-    from ._iocp import IOCP
-except ImportError:
-    IOCP = None
+    from . import lowlevel
+except ImportError as ex:
+    lowlevel = MissingModule(str(ex))
 
 
 class IocpReactor(BaseReactor):
@@ -14,18 +14,21 @@ class IocpReactor(BaseReactor):
     
     def __init__(self):
         BaseReactor.__init__(self)
-        self._iocp = IOCP()
+        self._iocp = lowlevel.IOCP()
         self._transports = set()
+        self._registered_handles = {}
     
     @classmethod
     def supported(cls):
-        return bool(IOCP)
+        return bool(lowlevel)
     
     def _shutdown(self):
         pass
 
     def register_transport(self, transport):
-        self._iocp.register(transport.fileno())
+        if transport in self._transports:
+            return
+        self._iocp.register(transport)
         self._transports.add(transport)
 
     def wakeup(self):
@@ -35,6 +38,7 @@ class IocpReactor(BaseReactor):
         tmax = time.time() + timeout
         while True:
             res = self._iocp.wait(timeout)
+            print "reactor got", res
             if not res:
                 break
             size, _, overlapped = res

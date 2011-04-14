@@ -86,15 +86,15 @@ class StreamTransport(BaseTransport):
             pass
         except Exception as ex:
             self._read_queue.pop()
-            dfr.throw(ex)
+            self.reactor.call(dfr.throw, ex)
         else:
             self._read_queue.pop()
-            dfr.set(data)
+            self.reactor.call(dfr.set, data)
             if not data:
                 self._eof = True
                 while self._read_queue:
                     dfr, _ = self._read_queue.pop()
-                    dfr.set("")
+                    self.reactor.call(dfr.set, "")
         
         if not self._read_queue or self._eof:
             self.reactor.unregister_read(self)
@@ -110,12 +110,12 @@ class StreamTransport(BaseTransport):
         try:
             written = self._do_write(data)
         except Exception as ex:
-            dfr.throw(ex)
+            self.reactor.call(dfr.throw, ex)
         else:
             if written is not None:
                 stream.seek(written - len(data), 1)
             if stream.tell() >= size:
-                dfr.set()
+                self.reactor.call(dfr.set)
         if not self._write_queue:
             self.reactor.unregister_write(self)
 

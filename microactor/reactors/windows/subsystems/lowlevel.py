@@ -9,6 +9,9 @@ class LowLevelIOSubsystem(Subsystem):
         return PipeTransport(self.reactor, fileobj, mode)
     def wrap_file(self, fileobj, mode):
         return FileTransport(self.reactor, fileobj, mode)
+    
+    def _open(self, filename):
+        pass
 
 
 

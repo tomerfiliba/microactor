@@ -1,7 +1,7 @@
 import socket
 from microactor.subsystems.net import NetSubsystem
 from microactor.utils import Deferred, safe_import, reactive, rreturn
-from ..transports import (ListeningSocketTransport, TcpStreamTransport, 
+from ..transports import (ListeningSocketTransport, StreamSocketTransport, 
     UdpTransport)
 win32file = safe_import("win32file")
 
@@ -10,38 +10,41 @@ class IocpNetSubsystem(NetSubsystem):
     def _init(self):
         self._keepalive = {}
     
+    @reactive
     def connect_tcp(self, host, port):
+        yield self.reactor.started
+        addr = yield self.resolve(host)
+        trns_dfr = Deferred()
+        
+        print "connect_tcp: trns_dfr =", trns_dfr
+        
         def finished(size, overlapped):
+            print "connect_tcp: ConnectEx finished"
             self._keepalive.pop(overlapped)
-            self.reactor.call(dfr.set)
-        
-        def do_connect(is_exc, value):
-            if is_exc:
-                dfr.throw(value)
-                return
-            print (value, port)
-            win32file.ConnectEx(sock.fileno(), (value, port), overlapped)
-        
+            self.reactor.call(trns_dfr.set, StreamSocketTransport(self.reactor, sock))
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(('0.0.0.0', 0)) # ConnectEx requires sock to be bound
+        sock.bind(('0.0.0.0', 0)) # ConnectEx requires the socket to be bound
         overlapped = win32file.OVERLAPPED()
         overlapped.object = finished
         self._keepalive[overlapped] = finished
-        dfr = Deferred()
-        addr_dfr = self.resolve(host)
-        addr_dfr.register(do_connect)
-        return dfr
+
+        print "connect_tcp: calling ConnectEx"
+
+        win32file.ConnectEx(sock.fileno(), (addr, port), overlapped)
+        print "connect_tcp: waiting for ConnectEx"
+        trns = yield trns_dfr
+        print "connect_tcp: done", trns
+        rreturn(trns)
     
+    @reactive
     def listen_tcp(self, port, host = "0.0.0.0", backlog = 40):
-        def do_listen():
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.setblocking(False)
-            sock.bind((host, port))
-            sock.listen(backlog)
-            dfr.set(ListeningSocketTransport(self.reactor, sock, TcpStreamTransport))
-        dfr = Deferred()
-        self.reactor.call(do_listen)
-        return dfr
+        yield self.reactor.started
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setblocking(False)
+        sock.bind((host, port))
+        sock.listen(backlog)
+        rreturn(ListeningSocketTransport(self.reactor, sock, StreamSocketTransport))
 
     @classmethod
     def _open_udp_sock(cls, host, port, broadcast):
@@ -57,9 +60,9 @@ class IocpNetSubsystem(NetSubsystem):
             try:
                 sock = self._open_udp_sock(host, port, broadcast)
             except Exception as ex:
-                dfr.throw(ex)
+                self.reactor.call(dfr.throw, ex)
             else:
-                dfr.set(UdpTransport(self.reactor, sock))
+                self.reactor.call(dfr.set, UdpTransport(self.reactor, sock))
         
         dfr = Deferred()
         self.reactor.call(do_open)

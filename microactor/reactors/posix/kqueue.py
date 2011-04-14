@@ -1,5 +1,10 @@
+import errno
 import select
 from .base import PosixPollingReactor
+
+
+POLLIN = 1
+POLLOUT = 2
 
 
 class KqueuePoller(object):
@@ -8,9 +13,9 @@ class KqueuePoller(object):
     
     def register(self, fd, flags):
         events = []
-        if flags & select.POLLIN:
+        if flags & POLLIN:
             events.append(select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_ADD | select.KQ_EV_ENABLE))
-        if flags & select.POLLOUT:
+        if flags & POLLOUT:
             events.append(select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD | select.KQ_EV_ENABLE))
         self._kqueue.control(events, 0)
     
@@ -32,13 +37,13 @@ class KqueueReactor(PosixPollingReactor):
         self._poller = KqueuePoller()
     
     def register_read(self, transport):
-        self._register_transport(transport, select.POLLIN)
+        self._register_transport(transport, POLLIN)
     def register_write(self, transport):
-        self._register_transport(transport, select.POLLOUT)
+        self._register_transport(transport, POLLOUT)
     def unregister_read(self, transport):
-        self._unregister_transport(transport, select.POLLIN)
+        self._unregister_transport(transport, POLLIN)
     def unregister_write(self, transport):
-        self._unregister_transport(transport, select.POLLOUT)
+        self._unregister_transport(transport, POLLOUT)
     
     @classmethod
     def supported(cls):

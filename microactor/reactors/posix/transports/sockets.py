@@ -103,7 +103,7 @@ class ListeningSocketTransport(BaseSocketTransport):
         s, _ = self.sock.accept()
         trns = self.transport_factory(self.reactor, s)
         dfr = self.accept_queue.pop()
-        dfr.set(trns)
+        self.reactor.call(dfr.set, trns)
 
 
 class ConnectingSocketTransport(BaseSocketTransport):
@@ -132,9 +132,9 @@ class ConnectingSocketTransport(BaseSocketTransport):
         
         self.reactor.unregister_write(self)
         if err in (0, errno.EISCONN):
-            self.connected_dfr.set()
+            self.reactor.call(self.connected_dfr.set)
         else:
-            self.connected_dfr.throw(socket.error(err, errno.errorcode[err]))
+            self.reactor.call(self.connected_dfr.throw, socket.error(err, errno.errorcode[err]))
     
     def on_write(self, hint):
         self._attempt_connect()
@@ -143,7 +143,7 @@ class ConnectingSocketTransport(BaseSocketTransport):
         if self.connected_dfr.is_set():
             return
         self.close()
-        self.connected_dfr.throw(socket.timeout("connection timed out"))
+        self.reactor.call(self.connected_dfr.throw, socket.timeout("connection timed out"))
 
 #===============================================================================
 # UDP
@@ -180,9 +180,9 @@ class UdpTransport(BaseSocketTransport):
         try:
             data, (host, port) = self.sock.recvfrom(hint)
         except Exception as ex:
-            dfr.throw(ex)
+            self.reactor.call(dfr.throw, ex)
         else:
-            dfr.set((host, port, data))
+            self.reactor.call(dfr.set, (host, port, data))
         if not self._read_queue:
             self.reactor.unregister_read(self)
 
@@ -191,9 +191,9 @@ class UdpTransport(BaseSocketTransport):
         try:
             count = self.sock.sendto(data, addr)
         except Exception as ex:
-            dfr.throw(ex)
+            self.reactor.call(dfr.throw, ex)
         else:
-            dfr.set(count)
+            self.reactor.call(dfr.set, count)
         if not self.write_queue:
             self.reactor.unregister_write(self)
 
@@ -227,9 +227,9 @@ class ConnectedUdpTransport(BaseSocketTransport):
         try:
             data = self.sock.recv(hint)
         except Exception as ex:
-            dfr.throw(ex)
+            self.reactor.call(dfr.throw, ex)
         else:
-            dfr.set(data)
+            self.reactor.call(dfr.set, data)
         if not self._read_queue:
             self.reactor.unregister_read(self)
 
@@ -238,9 +238,9 @@ class ConnectedUdpTransport(BaseSocketTransport):
         try:
             count = self.sock.send(data)
         except Exception as ex:
-            dfr.throw(ex)
+            self.reactor.call(dfr.throw, ex)
         else:
-            dfr.set(count)
+            self.reactor.call(dfr.set, count)
         if not self._write_queue:
             self.reactor.unregister_write(self)
 
@@ -296,11 +296,11 @@ class SslHandshakingTransport(BaseSocketTransport):
             elif ex.errno == ssl.SSL_ERROR_WANT_WRITE:
                 self.reactor.register_write(self)
             else:
-                self.connected_dfr.throw(ex)
+                self.reactor.call(self.connected_dfr.throw, ex)
         else:
             trns = StreamSslTransport(self.reactor, self.sock)
             self.detach()
-            self.connected_dfr.set(trns)
+            self.reactor.call(self.connected_dfr.set, trns)
     
     def on_read(self, hint):
         self.reactor.unregister_read(self)
