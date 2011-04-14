@@ -48,7 +48,9 @@ class Deferred(object):
         for cb in self._callbacks:
             self.reactor.call(cb, is_exc, value)
         if is_exc and not self._callbacks:
-            pass
+            for tb in self.traceback:
+                print >>sys.stderr, tb
+                print >>sys.stderr, "-----------------------------------------"
         del self._callbacks[:]
     def set(self, value = None):
         self._set(False, value)

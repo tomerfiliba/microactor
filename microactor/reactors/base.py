@@ -77,6 +77,7 @@ class BaseReactor(object):
         timeout = self._handle_jobs(now)
         if self._callbacks:
             timeout = 0
+        print "_work timeout=", timeout
         self._handle_transports(min(timeout, self.MAX_POLLING_TIMEOUT))
         self._handle_callbacks()
 
