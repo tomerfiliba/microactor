@@ -31,8 +31,6 @@ def no_reactor():
 if __name__ == "__main__":
     reactor = microactor.get_reactor()
     reactor.run(main)
-    from microactor.utils import Deferred
-    print Deferred.ID_GENERATOR.next()
     no_reactor()
 
 
