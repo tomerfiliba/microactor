@@ -1,22 +1,36 @@
 import time
+import weakref
 from microactor.utils.colls import MinHeap
+from microactor.utils import Deferred
+from microactor.subsystems import SUBSYSTEMS
 
 
 class ReactorError(Exception):
     pass
 
 class BaseReactor(object):
-    MAX_TIMEOUT = 0.5
+    MAX_TIMEOUT = 1
+    SUBSYSTEMS = SUBSYSTEMS
     
     def __init__(self):
         self._active = False
         self._jobs = MinHeap()
         self._callbacks = []
+        self.started = Deferred()
+        for factory in self.SUBSYSTEMS:
+            self.install_subsystem(factory)
+    
+    def install_subsystem(self, factory):
+        subs = factory(weakref.proxy(self))
+        if hasattr(self, subs.NAME):
+            raise ValueError("attribute %r already exists" % (subs.NAME,))
+        setattr(self, subs.NAME, subs)
     
     def start(self):
         if self._active:
             raise ReactorError("reactor already running")
         self._active = True
+        self.started.set()
         try:
             while self._active:
                 self._work()
@@ -28,6 +42,10 @@ class BaseReactor(object):
             return
         self._active = False
         self._wakeup()
+    
+    def run(self, func):
+        self.call(func, self)
+        self.start()
     
     def _wakeup(self):
         raise NotImplementedError()
@@ -52,8 +70,8 @@ class BaseReactor(object):
     def _process_callbacks(self):
         callbacks = self._callbacks
         self._callbacks = []
-        for cb, arg, kwargs in callbacks:
-            cb(*arg, **kwargs)
+        for cb, args, kwargs in callbacks:
+            cb(*args, **kwargs)
     
     def call(self, func, *args, **kwargs):
         self._callbacks.append((func, args, kwargs))
