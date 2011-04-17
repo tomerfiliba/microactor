@@ -370,7 +370,6 @@ class ConnectingSocketTransport(BaseSocketTransport):
         return self.connected_dfr
     
     def on_write(self):
-        print "connecting.on_write"
         self._attempt_connect()
     
     def _attempt_connect(self):
