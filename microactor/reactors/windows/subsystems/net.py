@@ -7,8 +7,10 @@ win32file = safe_import("win32file")
 
 
 class IocpNetSubsystem(NetSubsystem):
-    def _init(self):
-        self._keepalive = {}
+    def resolve(self, host):
+        return self.reactor.threadpool.call(socket.gethostbyname, host)
+    def resolve_ex(self, host):
+        return self.reactor.threadpool.call(socket.gethostbyname_ex, host)
     
     @reactive
     def connect_tcp(self, host, port):

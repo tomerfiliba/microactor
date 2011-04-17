@@ -16,7 +16,6 @@ class IocpReactor(BaseReactor):
         BaseReactor.__init__(self)
         self._iocp = lowlevel.IOCP()
         self._transports = set()
-        self._registered_handles = {}
     
     @classmethod
     def supported(cls):

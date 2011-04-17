@@ -1,6 +1,5 @@
 import time
 import weakref
-from functools import partial
 from microactor.utils.colls import MinHeap
 from microactor.subsystems import GENERIC_SUBSYSTEMS
 from microactor.utils import Deferred
