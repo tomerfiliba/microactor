@@ -84,7 +84,7 @@ def reactive(func):
         retval = Deferred()
         def excepthook(is_exc, val):
             if is_exc:
-                print "!!", repr(val)
+                print "$$", repr(val)
         retval.register(excepthook)
         try:        
             gen = func(*args, **kwargs)

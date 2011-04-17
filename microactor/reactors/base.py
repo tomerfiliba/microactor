@@ -53,6 +53,7 @@ class BaseReactor(object):
         if not self._active:
             return
         self._active = False
+        self.started.cancel()
         self._wakeup()
     
     def run(self, func):

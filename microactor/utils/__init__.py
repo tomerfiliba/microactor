@@ -5,6 +5,9 @@ class MissingModule(object):
     def __init__(self, modname, exc):
         self.__name__ = modname
         self._exc = exc
+    def __bool__(self):
+        return False
+    __nonzero__ = __bool__
     def __getattr__(self, name):
         raise ImportError(self._exc)
 
