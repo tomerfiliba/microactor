@@ -109,13 +109,10 @@ class SocketStreamTransport(StreamTransport):
     def shutdown(self, mode = "rw"):
         if mode == "r":
             flags = socket.SHUT_RD
-            self.reactor.unregister_read(self)
         elif mode == "w":
             flags = socket.SHUT_WR
-            self.reactor.unregister_write(self)
         elif mode == "rw":
             flags = socket.SHUT_RDWR
-            self._unregister()
         else:
             raise ValueError("invalid mode: %r" % (mode,))
         self.fileobj.shutdown(flags)

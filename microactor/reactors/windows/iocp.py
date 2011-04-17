@@ -1,4 +1,4 @@
-from ..base import BaseReactor
+from ..base import BaseReactor, ReactorError
 from microactor.utils import safe_import, MissingModule
 from .subsystems import IOCP_SUBSYSTEMS
 try:
@@ -14,7 +14,7 @@ class IocpReactor(BaseReactor):
     def __init__(self):
         BaseReactor.__init__(self)
         self._port = lowlevel.IOCP()
-        self._transports = set()
+        self._transports = {}
         self._overlap_callbacks = {}
     
     @classmethod
@@ -22,10 +22,25 @@ class IocpReactor(BaseReactor):
         return bool(lowlevel)
 
     def register_transport(self, transport):
-        if transport in self._transports:
-            return
+        fd = transport.fileno()
+        if fd in self._transports:
+            orig = self._transports[fd]
+            if transport is orig:
+                return
+            else:
+                try:
+                    orig.fileno()
+                except EnvironmentError:
+                    alive = False
+                else:
+                    alive = True
+                if alive:
+                    raise ReactorError("")
         self._port.register(transport)
-        self._transports.add(transport)
+        self._transports[fd] = transport
+
+    def _detach(self, transport):
+        pass
 
     def _wakeup(self):
         self._port.post()
