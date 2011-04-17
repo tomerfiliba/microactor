@@ -1,4 +1,5 @@
 from .deferred import Deferred, ReactorDeferred, reactive, rreturn
+from .transports import BufferedTransport, BoundTransport
 
 
 class MissingModule(object):
