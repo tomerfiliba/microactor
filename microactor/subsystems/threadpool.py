@@ -1,7 +1,7 @@
 import threading
 import itertools
 from Queue import Queue 
-from microactor.utils import Deferred
+from microactor.utils import ReactorDeferred
 from .base import Subsystem
 
 
@@ -32,7 +32,7 @@ class ThreadPoolSubsystem(Subsystem):
         needed = min(self._tasks.qsize() - len(self._workers), self._max_workers)
         for _ in range(needed):
             tid = self.ID_GENERATOR.next()
-            thd = threading.Thread(name = "worker-%d" % (tid,), target = self._worker_thread, args = (tid,))
+            thd = threading.Thread(name = "pooled-thread %d" % (tid,), target = self._worker_thread, args = (tid,))
             thd.setDaemon(True)
             self._workers[tid] = thd
             thd.start()
@@ -47,20 +47,46 @@ class ThreadPoolSubsystem(Subsystem):
                 try:
                     res = func(*args, **kwargs)
                 except Exception as ex:
-                    self.reactor.call(dfr.throw, ex)
+                    dfr.throw(ex)
                 else:
-                    self.reactor.call(dfr.set, res)
+                    dfr.set(res)
                 self.reactor._wakeup()
         finally:
             self._workers.pop(id, None)
     
     def call(self, func, *args, **kwargs):
-        dfr = Deferred()
+        dfr = ReactorDeferred(self.reactor)
         self._tasks.put((dfr, func, args, kwargs))
         self._spawn_workers()
         return dfr
 
 
+class ThreadingSubsystem(Subsystem):
+    NAME = "threading"
+    ID_GENERATOR = itertools.count()
+    
+    def _init(self):
+        self._threads = set()
+    
+    def call(self, func, *args, **kwargs):
+        def worker():
+            try:
+                res = func(*args, **kwargs)
+            except Exception as ex:
+                dfr.throw(ex)
+            else:
+                dfr.set(res)
+            finally:
+                self._threads.discard(thd)
+            self.reactor._wakeup()
+        
+        dfr = ReactorDeferred(self.reactor)
+        tid = self.ID_GENERATOR.next()
+        thd = threading.Thread(name = "thread-%d" % (tid,), target = worker)
+        self._threads.add(thd)
+        thd.setDaemon(True)
+        thd.start()
+        return dfr
 
 
 

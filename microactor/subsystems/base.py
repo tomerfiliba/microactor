@@ -4,7 +4,7 @@ class Subsystem(object):
     def __init__(self, reactor):
         assert self.NAME, "must set subsystem's name"
         self.reactor = reactor
-        self._init()
+    
     def _init(self):
         pass
     

@@ -41,6 +41,16 @@ class Deferred(object):
         self._set(True, exc)
 
 
+class ReactorDeferred(Deferred):
+    __slots__ = ["reactor"]
+    def __init__(self, reactor, value = NotImplemented):
+        Deferred.__init__(self, value)
+        self.reactor = reactor
+    def register(self, func):
+        func2 = lambda is_exc, val: self.reactor.call(func, is_exc, val)
+        Deferred.register(self, func2)
+
+
 class ReactiveReturn(Exception):
     def __init__(self, value):
         self.value = value

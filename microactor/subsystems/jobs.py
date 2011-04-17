@@ -1,6 +1,6 @@
 import time
 from .base import Subsystem
-from microactor.utils import Deferred
+from microactor.utils import ReactorDeferred
 import functools
 
 
@@ -20,7 +20,7 @@ class JobSubsystem(Subsystem):
                 dfr.set(res)
         
         functools.update_wrapper(wrapper, func)
-        dfr = Deferred()
+        dfr = ReactorDeferred(self.reactor)
         self.reactor.call_at(time.time() + interval, wrapper)
         return dfr
     
@@ -38,7 +38,7 @@ class JobSubsystem(Subsystem):
                     self.reactor.call_at(ts, wrapper)
         
         functools.update_wrapper(wrapper, func)
-        dfr = Deferred()
+        dfr = ReactorDeferred(self.reactor)
         t0 = time.time()
         self.reactor.call_at(t0, wrapper)
         return dfr

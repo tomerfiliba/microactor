@@ -1,6 +1,6 @@
 import socket
 from microactor.subsystems import Subsystem
-from ..transports import ListeningSocketTransport, ConnectingSocketTransport
+from .transports import ListeningSocketTransport, ConnectingSocketTransport
 from microactor.utils import reactive, rreturn
 
 
@@ -32,3 +32,4 @@ class NetSubsystem(Subsystem):
 
 
 
+POSIX_SUBSYSTEMS = [NetSubsystem]

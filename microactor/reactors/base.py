@@ -1,30 +1,42 @@
+import sys
 import time
 import weakref
 from microactor.utils.colls import MinHeap
-from microactor.utils import Deferred
-from microactor.subsystems import SUBSYSTEMS
+from microactor.utils import ReactorDeferred
+from microactor.subsystems import GENERIC_SUBSYSTEMS
 
 
 class ReactorError(Exception):
     pass
 
 class BaseReactor(object):
-    MAX_TIMEOUT = 1
-    SUBSYSTEMS = SUBSYSTEMS
+    if sys.platform == "win32":
+        MAX_TIMEOUT = 0.2   # to process Ctrl+C
+    else:
+        MAX_TIMEOUT = 1
+    SUBSYSTEMS = GENERIC_SUBSYSTEMS
     
     def __init__(self):
         self._active = False
         self._jobs = MinHeap()
         self._callbacks = []
-        self.started = Deferred()
+        self.started = ReactorDeferred(weakref.proxy(self))
         for factory in self.SUBSYSTEMS:
             self.install_subsystem(factory)
+
+    @classmethod
+    def supported(cls):
+        return False
     
+    #===========================================================================
+    # Core
+    #===========================================================================
     def install_subsystem(self, factory):
         subs = factory(weakref.proxy(self))
         if hasattr(self, subs.NAME):
             raise ValueError("attribute %r already exists" % (subs.NAME,))
         setattr(self, subs.NAME, subs)
+        subs._init()
     
     def start(self):
         if self._active:
@@ -47,6 +59,9 @@ class BaseReactor(object):
         self.call(func, self)
         self.start()
     
+    #===========================================================================
+    # Internal
+    #===========================================================================
     def _wakeup(self):
         raise NotImplementedError()
     
@@ -73,12 +88,17 @@ class BaseReactor(object):
         for cb, args, kwargs in callbacks:
             cb(*args, **kwargs)
     
+    #===========================================================================
+    # Callbacks
+    #===========================================================================
     def call(self, func, *args, **kwargs):
         self._callbacks.append((func, args, kwargs))
     def call_at(self, ts, func, *args, **kwargs):
         self._jobs.push((ts, func, args, kwargs))
 
 
+
+    
 
 
 

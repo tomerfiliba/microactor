@@ -1,4 +1,5 @@
-from .deferred import Deferred, reactive, rreturn
+from .deferred import Deferred, ReactorDeferred, reactive, rreturn
+
 
 class MissingModule(object):
     def __init__(self, modname, exc):
@@ -6,7 +7,6 @@ class MissingModule(object):
         self._exc = exc
     def __getattr__(self, name):
         raise ImportError(self._exc)
-
 
 def safe_import(modname):
     try:

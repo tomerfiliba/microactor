@@ -1,43 +1,46 @@
 import time
-import socket # required to initialize winsock on windows (for select)
 import select
 import errno
-import weakref
-from .base import BaseReactor, ReactorError
-from .transports import WakeupTransport
-from .subsystems import SUBSYSTEMS as SPECIFIC_SUBSYSTEMS
+from .base import PosixBaseReactor, ReactorError
 
 
-class SelectingReactor(BaseReactor):
-    SUBSYSTEMS = BaseReactor.SUBSYSTEMS + SPECIFIC_SUBSYSTEMS
-    
+class SelectReactor(PosixBaseReactor):
     def __init__(self):
-        BaseReactor.__init__(self)
+        PosixBaseReactor.__init__(self)
         self._read_transports = {}
         self._write_transports = {}
-        self._waker = WakeupTransport(weakref.proxy(self))
-        self.register_read(self._waker)
     
-    def _wakeup(self):
-        self._waker.set()
+    @classmethod
+    def supported(cls):
+        return hasattr(select, "select")
     
     def register_read(self, transport):
         fd = transport.fileno()
         if fd in self._read_transports and self._read_transports[fd] is not transport:
-            raise ReactorError("multiple transports register for the same fd")
+            raise ReactorError("multiple transports registered for the same fd")
         self._read_transports[fd] = transport
     
     def register_write(self, transport):
         fd = transport.fileno()
         if fd in self._write_transports and self._write_transports[fd] is not transport:
-            raise ReactorError("multiple transports register for the same fd")
+            raise ReactorError("multiple transports registered for the same fd")
         self._write_transports[fd] = transport
 
     def unregister_read(self, transport):
-        self._read_transports.pop(transport._fileno, None)
+        try:
+            fd = transport.fileno()
+        except EnvironmentError:
+            self._prune_bad_fds()
+        else:
+            self._read_transports.pop(fd, None)
     
     def unregister_write(self, transport):
-        self._write_transports.pop(transport._fileno, None)
+        try:
+            fd = transport.fileno()
+        except EnvironmentError:
+            self._prune_bad_fds()
+        else:
+            self._write_transports.pop(fd, None)
     
     def _handle_transports(self, timeout):
         if not self._read_transports and not self._write_transports:
