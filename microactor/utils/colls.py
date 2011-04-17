@@ -3,18 +3,12 @@ from .deferred import Deferred
 
 
 class Queue(object):
-    """amortized O(1) queue (or am i wrong?)"""
     __slots__ = ["_rindex", "_items"]
     def __init__(self):
         self._rindex = 0
         self._items = []
     def __len__(self):
         return len(self._items) - self._rindex
-    def _compact(self):
-        if len(self._items) / self._rindex < 2:
-            return
-        del self._items[:self._rindex]
-        self._rindex = 0
     def push(self, obj):
         self._items.append(obj)
     def peek(self):
@@ -22,7 +16,9 @@ class Queue(object):
     def pop(self):
         obj = self._items[self._rindex]
         self._rindex += 1
-        self._compact()
+        if len(self._items) / self._rindex > 2:
+            del self._items[:self._rindex]
+            self._rindex = 0
         return obj
     def clear(self):
         del self._items[:]
@@ -42,6 +38,7 @@ class MinHeap(object):
         return self._items[0]
     def __len__(self):
         return len(self._items)
+
 
 class ReactiveQueue(object):
     """a reactive queue"""

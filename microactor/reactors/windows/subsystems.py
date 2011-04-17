@@ -1,7 +1,8 @@
 import socket
 from microactor.subsystems import Subsystem
 from microactor.utils import ReactorDeferred, reactive, rreturn, safe_import
-from .transports import SocketStreamTransport, ListeningSocketTransport
+from .transports import (SocketStreamTransport, ListeningSocketTransport, 
+    PipeTransport)
 win32file = safe_import("win32file")
 
 
@@ -44,5 +45,11 @@ class NetSubsystem(Subsystem):
         sock.listen(backlog)
         rreturn(ListeningSocketTransport(self.reactor, sock))
 
+class LowlevelIOSubsystem(Subsystem):
+    NAME = "_io"
+    
+    def wrap_pipe(self, fileobj, mode):
+        return PipeTransport(self.reactor, fileobj, mode)
 
-IOCP_SUBSYSTEMS = [NetSubsystem]
+
+IOCP_SUBSYSTEMS = [LowlevelIOSubsystem, NetSubsystem]

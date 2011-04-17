@@ -3,7 +3,8 @@ import socket
 from microactor.subsystems import Subsystem
 from microactor.utils import reactive, rreturn, safe_import
 from .transports import (ListeningSocketTransport, ConnectingSocketTransport, 
-    SslHandshakingTransport, SslListeninglSocketTransport, DatagramSocketTransport)
+    SslHandshakingTransport, SslListeninglSocketTransport, DatagramSocketTransport,
+    PipeTransport)
 ssl = safe_import("ssl")
 
 
@@ -113,8 +114,14 @@ class NetSubsystem(Subsystem):
         rreturn(trns2)
 
 
+class LowlevelIOSubsystem(Subsystem):
+    NAME = "_io"
+    
+    def wrap_pipe(self, fileobj, mode):
+        return PipeTransport(self.reactor, fileobj, mode)
 
-POSIX_SUBSYSTEMS = [NetSubsystem]
+
+POSIX_SUBSYSTEMS = [LowlevelIOSubsystem, NetSubsystem]
 
 
 

@@ -1,10 +1,7 @@
 from ..base import BaseReactor, ReactorError
-from microactor.utils import safe_import, MissingModule
+from microactor.utils import safe_import
 from .subsystems import IOCP_SUBSYSTEMS
-try:
-    from . import lowlevel
-except ImportError as ex:
-    lowlevel = MissingModule(str(ex))
+windows = safe_import("microactor.utils.windows")
 win32file = safe_import("win32file")
 
 
@@ -13,13 +10,13 @@ class IocpReactor(BaseReactor):
     
     def __init__(self):
         BaseReactor.__init__(self)
-        self._port = lowlevel.IOCP()
+        self._port = windows.IOCP()
         self._transports = {}
         self._overlap_callbacks = {}
     
     @classmethod
     def supported(cls):
-        return bool(lowlevel)
+        return bool(windows)
 
     def register_transport(self, transport):
         fd = transport.fileno()

@@ -1,16 +1,16 @@
+import os
+import time
 import itertools
 import ctypes
 import socket # to initialize winsock
 import msvcrt
 import win32file
+import win32pipe
 import win32con
-import time
-#import pywintypes
 
 
 if not hasattr(win32file, "CreateIoCompletionPort"):
     raise ImportError("win32file is missing CreateIoCompletionPort")
-
 
 class IOCP(object):
     def __init__(self):
@@ -47,6 +47,9 @@ class IOCP(object):
             return None
         elif rc == 0:
             return size, overlapped
+        elif rc == 109:
+            # ERROR_BROKEN_PIPE
+            return size, overlapped
         else:
             ex = WindowsError(rc)
             ex.errno = ex.winerror = rc
@@ -65,6 +68,31 @@ class IOCP(object):
                 break
         return events        
 
+_pipe_id_counter = itertools.count()
+
+def create_overlapped_pipe():
+    pipe_name = r"\\.\pipe\anon_%s_%s_%s" % (os.getpid(), time.time(), _pipe_id_counter.next())
+    FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000
+
+    read_handle = win32pipe.CreateNamedPipe(pipe_name,
+                         win32con.PIPE_ACCESS_INBOUND | win32con.FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                         win32con.PIPE_TYPE_BYTE | win32con.PIPE_WAIT,
+                         1,             # Number of pipes
+                         16384,         # Out buffer size
+                         16384,         # In buffer size
+                         1000,          # Timeout in ms
+                         None)
+
+    write_handle = win32file.CreateFile(pipe_name,
+                        win32con.GENERIC_WRITE,
+                        0,              # No sharing
+                        None,           # security
+                        win32con.OPEN_EXISTING,
+                        win32con.FILE_ATTRIBUTE_NORMAL | win32con.FILE_FLAG_OVERLAPPED,
+                        None)           # Template file
+    
+    return read_handle, write_handle
+
 
 #
 # references: 
@@ -79,13 +107,19 @@ def _init_winsockdll():
 
 def WSASendTo():
     _init_winsockdll()
+    raise NotImplementedError()
 
 def WSARecvFrom():
     _init_winsockdll()
+    raise NotImplementedError()
 
 
 
-
+if __name__ == "__main__":
+    rh, wh = create_overlapped_pipe()
+    print rh, wh
+    print win32file.WriteFile(wh, "hello world", None)
+    print win32file.ReadFile(rh, 100, None)
 
 
 

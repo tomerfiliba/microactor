@@ -1,7 +1,8 @@
 import socket
-from microactor.utils import safe_import, ReactorDeferred
+from microactor.utils import safe_import, ReactorDeferred, reactive
 from ..transports import ClosedFile, DetachedFile
-from ..transports import TransportError, ReadRequiresMoreData, OverlappingRequestError 
+from ..transports import TransportError, OverlappingRequestError 
+msvcrt = safe_import("msvcrt")
 win32file = safe_import("win32file")
 
 
@@ -26,14 +27,16 @@ class StreamTransport(BaseTransport):
     MAX_READ_SIZE = 32000
     MAX_WRITE_SIZE = 32000
     
-    __slots__ = ["fileobj"]
+    __slots__ = ["fileobj", "_ongoing_read", "_ongoing_write"]
     def __init__(self, reactor, fileobj):
         BaseTransport.__init__(self, reactor)
         self.fileobj = fileobj
         self._register()
+        self._ongoing_read = False
+        self._ongoing_write = False
     
     def fileno(self):
-        return self.fileobj.fileno()
+        return msvcrt.get_osfhandle(self.fileobj.fileno())
     def detach(self):
         if self.fileobj:
             self.reactor._detach(self)
@@ -45,8 +48,13 @@ class StreamTransport(BaseTransport):
             self.fileobj = ClosedFile
     
     def read(self, count):
+        if self._ongoing_read:
+            raise OverlappingRequestError("overlapping reads")
+        self._ongoing_read = True
+        
         def read_finished(size, _):
             data = str(buf[:size])
+            self._ongoing_read = False
             dfr.set(data)
         
         dfr = ReactorDeferred(self.reactor)
@@ -57,21 +65,28 @@ class StreamTransport(BaseTransport):
             win32file.ReadFile(self.fileno(), buf, overlapped)
         except Exception as ex:
             self.reactor._discard_overlapped(overlapped)
+            self._ongoing_read = False
             dfr.throw(ex)
         return dfr
     
     def write(self, data):
+        if self._ongoing_write:
+            raise OverlappingRequestError("overlapping writes")
+
+        self._ongoing_write = True
         remaining = [data]
         
         def write_finished(size, _):
             remaining[0] = remaining[0][:size]
             if not remaining[0]:
+                self._ongoing_write = False
                 dfr.set()
             else:
                 write_some()
         
         def write_some():
             if not remaining[0]:
+                self._ongoing_write = False
                 dfr.set()
                 return
             chunk = remaining[0][:self.MAX_READ_SIZE]
@@ -80,7 +95,7 @@ class StreamTransport(BaseTransport):
             try:
                 win32file.WriteFile(self.fileno(), chunk, overlapped)
             except Exception as ex:
-                print ex
+                self._ongoing_write = False
                 self.reactor._discard_overlapped(overlapped)
                 dfr.throw(ex)
         
@@ -94,6 +109,8 @@ class SocketStreamTransport(StreamTransport):
         StreamTransport.__init__(self, reactor, sock)
         sock.setblocking(False)
     
+    def fileno(self):
+        return self.fileobj.fileno() # no need to translate with get_osfhandle
     def getsockname(self):
         return self.fileobj.getsockname()
     def getpeername(self):
@@ -118,13 +135,42 @@ class SocketStreamTransport(StreamTransport):
         self.fileobj.shutdown(flags)
 
 
+class PipeTransport(StreamTransport):
+    def __init__(self, reactor, fileobj, mode, auto_flush = True):
+        if mode not in ["r", "w", "rw"]:
+            raise ValueError("mode must be 'r', 'w', or 'rw'")
+        self.mode = mode
+        self.name = getattr(fileobj, "name", None)
+        self.auto_flush = auto_flush
+        StreamTransport.__init__(self, reactor, fileobj)
+        if "r" not in self.mode:
+            self.read = self._wrong_mode
+        if "w" not in self.mode:
+            self.write = self._wrong_mode
+            self.flush = self._wrong_mode
+
+    @staticmethod
+    def _wrong_mode(*args):
+        raise IOError("file mode does not permit this operation")
+
+    def flush(self):
+        win32file.FlushFileBuffers(self.fileno())
+    def isatty(self):
+        return self.fileobj.isatty()
+    @reactive
+    def write(self, data):
+        yield StreamTransport.write(self, data)
+        if self.auto_flush:
+            yield self.flush()
+
+
 class BaseSocketTransport(BaseTransport):
     __slots__ = ["sock"]
     def __init__(self, reactor, sock):
         BaseTransport.__init__(self, reactor)
         self.sock.setblocking(False)
     def fileno(self):
-        return self.sock.fileno()
+        return self.sock.fileno() # no need to translate with get_osfhandle
     def detach(self):
         if self.sock:
             self.reactor._detach(self)
