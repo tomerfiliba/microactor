@@ -113,8 +113,6 @@ class ProcessSubsystem(Subsystem):
     def run(self, args, input = None, retcodes = (0,), cwd = None, env = None, 
             shell = False):
         proc = yield self.spawn(args, cwd, env, shell)
-        stdout_dfr = ReactorDeferred(self.reactor)
-        stderr_dfr = ReactorDeferred(self.reactor)
         
         if input:
             @reactive
@@ -122,19 +120,11 @@ class ProcessSubsystem(Subsystem):
                 yield proc.stdin.write(input)
                 yield proc.stdin.close()
             self.reactor.call(write_all_stdin)
+        else:
+            yield proc.stdin.close()
         
-        @reactive
-        def read_all_stdout():
-            data = yield proc.stdout.read_all()
-            stdout_dfr.set(data)
-        self.reactor.call(read_all_stdout)
-        
-        @reactive
-        def read_all_stderr():
-            data = yield proc.stderr.read_all()
-            stderr_dfr.set(data)
-        self.reactor.call(read_all_stderr)
-        
+        stdout_dfr = proc.stdout.read_all()
+        stderr_dfr = proc.stderr.read_all()
         rc = yield proc.wait()
         stdout_data = yield stdout_dfr
         stderr_data = yield stderr_dfr
@@ -143,15 +133,6 @@ class ProcessSubsystem(Subsystem):
             raise ProcessExecutionError("unexpected return code", rc, stdout_data, stderr_data)
         else:
             rreturn((rc, stdout_data, stderr_data))
-
-
-
-
-
-
-
-
-
 
 
 

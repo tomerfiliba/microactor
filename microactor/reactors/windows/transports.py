@@ -4,6 +4,7 @@ from ..transports import ClosedFile, DetachedFile
 from ..transports import TransportError, OverlappingRequestError 
 msvcrt = safe_import("msvcrt")
 win32file = safe_import("win32file")
+pywintypes = safe_import("pywintypes")
 
 
 class BaseTransport(object):
@@ -66,7 +67,11 @@ class StreamTransport(BaseTransport):
         except Exception as ex:
             self.reactor._discard_overlapped(overlapped)
             self._ongoing_read = False
-            dfr.throw(ex)
+            if isinstance(ex, pywintypes.error) and ex.winerror == 109:
+                # ERROR_BROKEN_PIPE
+                dfr.set(None)
+            else:
+                dfr.throw(ex)
         return dfr
     
     def write(self, data):
@@ -105,6 +110,7 @@ class StreamTransport(BaseTransport):
 
 
 class SocketStreamTransport(StreamTransport):
+    __slots__ = []
     def __init__(self, reactor, sock):
         StreamTransport.__init__(self, reactor, sock)
         sock.setblocking(False)
@@ -152,7 +158,6 @@ class PipeTransport(StreamTransport):
     @staticmethod
     def _wrong_mode(*args):
         raise IOError("file mode does not permit this operation")
-
     def flush(self):
         win32file.FlushFileBuffers(self.fileno())
     def isatty(self):

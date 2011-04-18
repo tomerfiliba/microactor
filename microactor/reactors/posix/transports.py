@@ -172,7 +172,7 @@ class StreamTransport(BaseTransport):
 # Pipes and Files
 #===============================================================================
 class PipeTransport(StreamTransport):
-    __slots__ = ["mode", "name", "_flush_dfr", "auto_flush"]
+    #__slots__ = ["mode", "name", "_flush_dfr", "auto_flush"]
     def __init__(self, reactor, fileobj, mode, auto_flush = True):
         if mode not in ("r", "w", "rw"):
             raise ValueError("invalid mode")

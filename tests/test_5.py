@@ -4,8 +4,8 @@ import microactor
 @microactor.reactive
 def main(reactor):
     try:
-        #res = yield reactor.proc.run("notepad")
-        res = yield reactor.proc.run("dir", shell=True)
+        #res = yield reactor.proc.run(["notepad"])
+        res = yield reactor.proc.run(["dir"], shell=True)
         print res
     finally:
         reactor.stop()
@@ -13,6 +13,7 @@ def main(reactor):
 
 if __name__ == "__main__":
     reactor = microactor.get_reactor()
+    print reactor
     reactor.run(main)
 
 

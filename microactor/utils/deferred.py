@@ -1,13 +1,20 @@
+import sys
 import functools
+import inspect
+import traceback
 from types import GeneratorType
 
 
 class DeferredAlreadySet(Exception):
     pass
 
+def format_stack(ignore = 2):
+    frames = inspect.stack()[ignore:]
+    return "".join(traceback.format_list((f[1], f[2], f[3], f[4][f[5]]) 
+        for f in reversed(frames)))
 
 class Deferred(object):
-    __slots__ = ["value", "_callbacks", "canceled"]
+    __slots__ = ["value", "_callbacks", "canceled", "tracebacks"]
     def __init__(self, value = NotImplemented):
         if value is NotImplemented:
             self.value = None
@@ -15,6 +22,7 @@ class Deferred(object):
             self.value = (False, value)
         self._callbacks = []
         self.canceled = False
+        self.tracebacks = [format_stack()]
     def register(self, func):
         if self.canceled:
             return
@@ -37,7 +45,13 @@ class Deferred(object):
         del self._callbacks
     def set(self, value = None):
         self._set(False, value)
-    def throw(self, exc):
+    def throw(self, exc, with_traceback = True):
+        self.tracebacks.append(format_stack())
+        t, v, tb = sys.exc_info()
+        if v is not None:
+            tbtext = "".join(traceback.format_exception(t, v, tb))
+            self.tracebacks.append(tbtext)
+        exc._tracebacks = self.tracebacks
         self._set(True, exc)
 
 
@@ -83,8 +97,12 @@ def reactive(func):
         
         retval = Deferred()
         def excepthook(is_exc, val):
-            if is_exc:
-                print "$$", repr(val)
+            if is_exc and not getattr(val, "_handled", False):
+                for tb in getattr(val, "_tracebacks", ()):
+                    print >>sys.stderr, tb
+                    print >>sys.stderr, "-" * 60
+                print >>sys.stderr, "$$", repr(val)
+                val._handled = True
         retval.register(excepthook)
         try:        
             gen = func(*args, **kwargs)
