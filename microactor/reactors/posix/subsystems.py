@@ -9,7 +9,7 @@ from .transports import (ListeningSocketTransport, ConnectingSocketTransport,
 ssl = safe_import("ssl")
 
 
-class NetSubsystem(NetSubsystem):
+class PosixNetSubsystem(NetSubsystem):
     @reactive
     def connect_tcp(self, host, port, timeout = None):
         yield self.reactor.started
@@ -115,7 +115,7 @@ class LowlevelIOSubsystem(Subsystem):
         return PipeTransport(self.reactor, fileobj, mode)
 
 
-POSIX_SUBSYSTEMS = [LowlevelIOSubsystem, NetSubsystem]
+POSIX_SUBSYSTEMS = [LowlevelIOSubsystem, PosixNetSubsystem]
 
 
 

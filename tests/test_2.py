@@ -18,6 +18,7 @@ def do_client(reactor):
     data = yield conn.read(100)
     print "client got", repr(data)
     conn.close()
+    print "client quits"
 
 @microactor.reactive
 def handle_client(conn):
@@ -25,6 +26,7 @@ def handle_client(conn):
     print "server got", repr(data)
     yield conn.write("hello " + data)
     conn.close()
+    print "server quits"
 
 
 if __name__ == "__main__":

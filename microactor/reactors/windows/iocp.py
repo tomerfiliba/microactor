@@ -33,7 +33,7 @@ class IocpReactor(BaseReactor):
                     alive = True
                 if alive:
                     raise ReactorError("")
-        self._port.register(transport)
+        self._port.register(transport.fileno())
         self._transports[fd] = transport
 
     def _detach(self, transport):

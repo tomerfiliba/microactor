@@ -22,13 +22,7 @@ class IOCP(object):
     
     def register(self, handle):
         """registers the given handle with the IOCP. the handle cannot be 
-        unregistered later"""
-        if hasattr(handle, "fileno"):
-            handle = handle.fileno()
-            try:
-                handle = msvcrt.get_osfhandle(handle)
-            except IOError:
-                pass
+        unregistered later. handle must be a windows handle, not a fileno"""
         key = self._key.next()
         win32file.CreateIoCompletionPort(handle, self._port, key, 0)
         return key
@@ -95,29 +89,72 @@ def create_overlapped_pipe():
 
 
 OPEN_MODE_TABLE = {
-    "r" : (win32con.GENERIC_READ, win32con.OPEN_EXISTING, "r"),
+    "r" : (win32con.GENERIC_READ,                           win32con.OPEN_EXISTING, "r"),
     "r+" : (win32con.GENERIC_READ | win32con.GENERIC_WRITE, win32con.OPEN_EXISTING, "rw"),
-    "w" : (win32con.GENERIC_WRITE, win32con.CREATE_ALWAYS, win32con.CREATE_ALWAYS, "w"),
+    "w" : (win32con.GENERIC_WRITE,                          win32con.CREATE_ALWAYS, "w"),
     "w+" : (win32con.GENERIC_READ | win32con.GENERIC_WRITE, win32con.CREATE_ALWAYS, "rw"),
-    "a" : (win32con.GENERIC_WRITE, win32con.OPEN_ALWAYS, "w"),
-    "a+" : (win32con.GENERIC_READ | win32con.GENERIC_WRITE, win32con.OPEN_ALWAYS, "rw"),
+    "a" : (win32con.GENERIC_WRITE,                          win32con.OPEN_ALWAYS,   "w"),
+    "a+" : (win32con.GENERIC_READ | win32con.GENERIC_WRITE, win32con.OPEN_ALWAYS,   "rw"),
 }
-def open_overlapped(filename, mode = "r"):
-    mode2 = mode.lower().replace("b", "").replace("t", "")
-    mode_flags, disposition, access = OPEN_MODE_TABLE[mode2]
-    handle = win32file.CreateFile(filename, 
-        mode_flags,
-        win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE,
-        None,
-        disposition,
-        win32con.FILE_FLAG_OVERLAPPED,
-        None,
-    )
-    fd = msvcrt.open_osfhandle(handle.Detach())
-    return os.fdopen(fd, mode2), access
+
+class WinFile(object):
+    def __init__(self, handle):
+        self.handle = handle
+    @classmethod
+    def open(cls, filename, mode = "r"):
+        mode2 = mode.lower().replace("b", "").replace("t", "")
+        create_file_flags, disposition, access = OPEN_MODE_TABLE[mode2]
+        handle = win32file.CreateFile(filename, 
+            create_file_flags,
+            win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE,
+            None, # security
+            disposition,
+            win32con.FILE_FLAG_OVERLAPPED,
+            None, # template
+        )
+        fobj = cls(handle)
+        if "a" in mode2:
+            fobj.seek(0, 2)
+        return fobj, access
+    def fileno(self):
+        return self.handle
+    def flush(self):
+        win32file.FlushFileBuffers(self.handle)
+    def close(self):
+        if self.handle:
+            self.handle.close()
+            self.handle = None
+    def read(self, count):
+        ov = win32file.OVERLAPPED()
+        _, data = win32file.ReadFile(self.handle, count, ov)
+        return data
+    def write(self, data):
+        ov = win32file.OVERLAPPED()
+        win32file.WriteFile(self.handle, data, ov)
+    def seek(self, offset, whence = 0):
+        if whence == 0:
+            whence = win32file.FILE_BEGIN
+        elif whence == 1:
+            whence = win32file.FILE_CURRENT
+        elif whence == 2:
+            whence = win32file.FILE_END
+        else:
+            raise ValueError("invalid whence value %r" % (whence,))
+        self.flush()
+        win32file.SetFilePointer(self.handle, offset, whence)
+    def tell(self):
+        self.flush()
+        return win32file.SetFilePointer(self.handle, 0, win32file.FILE_CURRENT)
 
 
 
-
+if __name__ == "__main__":
+    f, access = WinFile.open("test.txt", "w")
+    print f
+    f.write("hello")
+    f.seek(5)
+    f.write("world")
+    print f.tell()
+    f.close()
 
 

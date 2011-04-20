@@ -1,5 +1,5 @@
 import socket
-from microactor.utils import safe_import, ReactorDeferred, reactive
+from microactor.utils import safe_import, ReactorDeferred, reactive, rreturn
 from ..transports import ClosedFile, DetachedFile
 from ..transports import OverlappingRequestError 
 msvcrt = safe_import("msvcrt")
@@ -48,6 +48,10 @@ class StreamTransport(BaseTransport):
             self.reactor._detach(self)
             self.fileobj.close()
             self.fileobj = ClosedFile
+
+    def _get_read_overlapped(self, callback):
+        return self.reactor._get_overlapped(callback)
+    _get_write_overlapped = _get_read_overlapped
     
     def read(self, count):
         if self._ongoing_read:
@@ -61,7 +65,7 @@ class StreamTransport(BaseTransport):
         
         dfr = ReactorDeferred(self.reactor)
         count = min(count, self.MAX_READ_SIZE)
-        overlapped = self.reactor._get_overlapped(read_finished)
+        overlapped = self._get_read_overlapped(read_finished)
         try:
             buf = win32file.AllocateReadBuffer(count)
             win32file.ReadFile(self.fileno(), buf, overlapped)
@@ -77,6 +81,7 @@ class StreamTransport(BaseTransport):
                 dfr.throw(ex)
         return dfr
     
+
     def write(self, data):
         if self._ongoing_write:
             raise OverlappingRequestError("overlapping writes")
@@ -85,7 +90,7 @@ class StreamTransport(BaseTransport):
         remaining = [data]
         
         def write_finished(size, _):
-            remaining[0] = remaining[0][:size]
+            remaining[0] = remaining[0][size:]
             if not remaining[0]:
                 self._ongoing_write = False
                 dfr.set()
@@ -98,8 +103,7 @@ class StreamTransport(BaseTransport):
                 dfr.set()
                 return
             chunk = remaining[0][:self.MAX_READ_SIZE]
-            overlapped = self.reactor._get_overlapped(write_finished)
-            print "write_some", repr(chunk), overlapped
+            overlapped = self._get_read_overlapped(write_finished)
             try:
                 win32file.WriteFile(self.fileno(), chunk, overlapped)
             except Exception as ex:
@@ -158,6 +162,8 @@ class PipeTransport(StreamTransport):
             self.write = self._wrong_mode
             self.flush = self._wrong_mode
 
+    def fileno(self):
+        return self.fileobj.handle
     @staticmethod
     def _wrong_mode(*args):
         raise IOError("file mode does not permit this operation")
@@ -172,14 +178,43 @@ class PipeTransport(StreamTransport):
             yield self.flush()
 
 
-class FileTransport(StreamTransport):
-    pass
+class FileTransport(PipeTransport):
+    __slots__ = ["_position"]
+    def __init__(self, reactor, fileobj, mode, auto_flush = True):
+        PipeTransport.__init__(self, reactor, fileobj, mode, auto_flush)
+        self._position = 0
+    def tell(self):
+        return self._position
+    def seek(self, offset, whence = 0):
+        if "w" in self.mode:
+            yield self.flush()
+        self.fileobj.seek(offset, whence)
+        self._position = self.fileobj.tell()
+
+    def _get_read_overlapped(self, callback):
+        ov = self.reactor._get_overlapped(callback)
+        ov.Offset = self._position & 0xFFFFFFFF
+        ov.OffsetHigh = (self._position >> 32) & 0xFFFFFFFF
+        return ov
+    _get_write_overlapped = _get_read_overlapped
+
+    @reactive
+    def read(self, count):
+        data = yield PipeTransport.read(self, count)
+        self._position += len(data)
+        rreturn(data)
+    
+    @reactive
+    def write(self, data):
+        yield PipeTransport.write(self, data)
+        self._position += len(data)
 
 
 class BaseSocketTransport(BaseTransport):
     __slots__ = ["sock"]
     def __init__(self, reactor, sock):
         BaseTransport.__init__(self, reactor)
+        self.sock = sock
         self.sock.setblocking(False)
     def fileno(self):
         return self.sock.fileno() # no need to translate with get_osfhandle
