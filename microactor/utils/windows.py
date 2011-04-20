@@ -9,6 +9,8 @@ import win32pipe
 import win32con
 
 
+BROKEN_PIPE_ERRORS = (109, 232)
+
 if not hasattr(win32file, "CreateIoCompletionPort"):
     raise ImportError("win32file is missing CreateIoCompletionPort")
 
@@ -47,8 +49,7 @@ class IOCP(object):
             return None
         elif rc == 0:
             return size, overlapped
-        elif rc == 109:
-            # ERROR_BROKEN_PIPE
+        elif rc in BROKEN_PIPE_ERRORS:
             return size, overlapped
         else:
             ex = WindowsError(rc)
@@ -93,6 +94,28 @@ def create_overlapped_pipe():
     
     return read_handle, write_handle
 
+OPEN_MODE_TABLE = {
+    "r" : (win32con.GENERIC_READ, win32con.OPEN_EXISTING, "r"),
+    "r+" : (win32con.GENERIC_READ | win32con.GENERIC_WRITE, win32con.OPEN_EXISTING, "rw"),
+    "w" : (win32con.GENERIC_WRITE, win32con.CREATE_ALWAYS, win32con.CREATE_ALWAYS, "w"),
+    "w+" : (win32con.GENERIC_READ | win32con.GENERIC_WRITE, win32con.CREATE_ALWAYS, "rw"),
+    "a" : (win32con.GENERIC_WRITE, win32con.OPEN_ALWAYS, "w"),
+    "a+" : (win32con.GENERIC_READ | win32con.GENERIC_WRITE, win32con.OPEN_ALWAYS, "rw"),
+}
+def open_overlapped(filename, mode = "r"):
+    mode2 = mode.lower().replace("b", "").replace("t", "")
+    mode_flags, disposition, access = OPEN_MODE_TABLE[mode2]
+    handle = win32file.CreateFile(filename, 
+        mode_flags,
+        win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE,
+        None,
+        disposition,
+        win32con.FILE_FLAG_OVERLAPPED,
+        None,
+    )
+    fd = msvcrt.open_osfhandle(handle.Detach())
+    return os.fdopen(fd, mode2), access
+
 
 #
 # references: 
@@ -120,6 +143,9 @@ if __name__ == "__main__":
     print rh, wh
     print win32file.WriteFile(wh, "hello world", None)
     print win32file.ReadFile(rh, 100, None)
+    #wh.Close()
+    rh.close()
+    print win32file.WriteFile(wh, "hello world", None)
 
 
 

@@ -1,9 +1,10 @@
 import socket
 from microactor.utils import safe_import, ReactorDeferred, reactive
 from ..transports import ClosedFile, DetachedFile
-from ..transports import TransportError, OverlappingRequestError 
+from ..transports import OverlappingRequestError 
 msvcrt = safe_import("msvcrt")
 win32file = safe_import("win32file")
+windows = safe_import("microactors.utils.windows")
 pywintypes = safe_import("pywintypes")
 
 
@@ -67,8 +68,10 @@ class StreamTransport(BaseTransport):
         except Exception as ex:
             self.reactor._discard_overlapped(overlapped)
             self._ongoing_read = False
-            if isinstance(ex, pywintypes.error) and ex.winerror == 109:
-                # ERROR_BROKEN_PIPE
+            if isinstance(ex, pywintypes.error) and ex.winerror in windows.BROKEN_PIPE_ERRORS:
+                # why can't windows be just a little consistent?! 
+                # why can't a set of APIs have the same semantics for all kinds
+                # of handles? grrrrr
                 dfr.set(None)
             else:
                 dfr.throw(ex)
@@ -167,6 +170,10 @@ class PipeTransport(StreamTransport):
         yield StreamTransport.write(self, data)
         if self.auto_flush:
             yield self.flush()
+
+
+class FileTransport(StreamTransport):
+    pass
 
 
 class BaseSocketTransport(BaseTransport):

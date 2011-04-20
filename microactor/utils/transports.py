@@ -1,4 +1,6 @@
 from .deferred import reactive, rreturn
+import sys
+import codecs
 
 
 class StreamTransportAdapter(object):
@@ -18,6 +20,37 @@ class StreamTransportAdapter(object):
         return self.transport.write(data)
     def read(self, count):
         return self.transport.read(count)
+
+
+class CodecTransport(StreamTransportAdapter):
+    def __init__(self, transport, encoding = None, errors = "strict"):
+        StreamTransportAdapter.__init__(self, transport)
+        if encoding is None:
+            encoding = sys.getfilesystemencoding()
+        self.encoding = encoding
+        self.encoder = codecs.getincrementalencoder(encoding)(errors)
+        self.decoder = codecs.getincrementaldecoder(encoding)(errors)
+    
+    @reactive
+    def close(self):
+        raw = self.encoder.encode("", final = True)
+        if raw:
+            yield self.transport.write(raw)
+        yield self.transport.close()
+    
+    @reactive
+    def read(self, count):
+        raw = yield self.transport.read(count)
+        if raw is None:
+            return self.decoder.decode("", final = True)
+        else:
+            return self.decoder.decode(raw)
+    
+    @reactive
+    def write(self, data):
+        raw = self.encoder.encode(data)
+        if raw:
+            yield self.transport.write(raw)
 
 
 class BufferedTransport(StreamTransportAdapter):
