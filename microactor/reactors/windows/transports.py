@@ -4,7 +4,7 @@ from ..transports import ClosedFile, DetachedFile
 from ..transports import OverlappingRequestError 
 msvcrt = safe_import("msvcrt")
 win32file = safe_import("win32file")
-win32iocp = safe_import("microactors.arch.windows.iocp")
+win32iocp = safe_import("microactor.arch.windows.iocp")
 pywintypes = safe_import("pywintypes")
 
 

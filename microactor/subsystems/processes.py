@@ -5,14 +5,16 @@ import subprocess
 from .base import Subsystem
 from microactor.utils import ReactorDeferred, reactive, rreturn
 from microactor.utils import BufferedTransport, safe_import
-windows = safe_import("microactor.utils.windows")
+win32iocp = safe_import("microactor.arch.windows.iocp")
 msvcrt = safe_import("msvcrt")
 
 
-if sys.platform == "win32":
-    # god bless monkey patching
+#
+# let us praise monkey patching, for it pwnz
+#
+if win32iocp: # sys.platform == "win32"
     import _subprocess
-    _subprocess.CreatePipe = lambda a, b: windows.create_overlapped_pipe()
+    _subprocess.CreatePipe = lambda a, b: win32iocp.create_overlapped_pipe()
 
 
 class ProcessExecutionError(Exception):
