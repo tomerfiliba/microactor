@@ -42,9 +42,9 @@ class CodecTransport(StreamTransportAdapter):
     def read(self, count):
         raw = yield self.transport.read(count)
         if raw is None:
-            return self.decoder.decode("", final = True)
+            rreturn(self.decoder.decode("", final = True))
         else:
-            return self.decoder.decode(raw)
+            rreturn(self.decoder.decode(raw))
     
     @reactive
     def write(self, data):

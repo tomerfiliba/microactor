@@ -1,19 +1,13 @@
 import socket
 from microactor.subsystems import Subsystem
+from microactor.subsystems.net import NetSubsystem
 from microactor.utils import ReactorDeferred, reactive, rreturn, safe_import
 from .transports import (SocketStreamTransport, ListeningSocketTransport, 
     PipeTransport)
 win32file = safe_import("win32file")
 
 
-class NetSubsystem(Subsystem):
-    NAME = "net"
-
-    def resolve(self, host):
-        return self.reactor.threadpool.call(socket.gethostbyname, host)
-    def resolve_ex(self, host):
-        return self.reactor.threadpool.call(socket.gethostbyname_ex, host)
-    
+class IocpNetSubsystem(NetSubsystem):   
     @reactive
     def connect_tcp(self, host, port, timeout = None):
         def connect_finished(size, overlapped):

@@ -1,7 +1,8 @@
+import weakref
 import win32api
 import win32console
-from contextlib import contextmanager
 import win32event
+from contextlib import contextmanager
 
 
 class Cursor(object):
@@ -15,7 +16,6 @@ class Cursor(object):
         yellow = 6,
         white = 7,
         gray = 8,
-        grey = 8,
         bright_blue = 9,
         bright_green = 10,
         bright_cyan = 11,
@@ -25,6 +25,7 @@ class Cursor(object):
         bright_white = 15,
     )
     REV_COLOR_NAMES = dict((v, k) for k, v in COLOR_NAMES.items())
+    COLOR_NAMES["grey"] = COLOR_NAMES["gray"]
     
     def __init__(self, con):
         self.con = con
@@ -95,8 +96,8 @@ class Console(object):
         self.outbuf = win32console.PyConsoleScreenBufferType(
             win32api.GetStdHandle(win32api.STD_OUTPUT_HANDLE))
         self.clear_events()
-        self.cursor = Cursor(self)
-        self.screen = Screen(self)
+        self.cursor = Cursor(weakref.proxy(self))
+        self.screen = Screen(weakref.proxy(self))
     
     @contextmanager
     def raw_mode(self):
@@ -131,12 +132,12 @@ class Console(object):
 
 if __name__ == "__main__":
     con = Console()
-    print "events", con.get_num_of_events()
-    print win32event.WaitForSingleObject(con.inbuf, 1000)
-    
+   
     with con.raw_mode():
-        con.screen.clear(b="gray")
+        con.screen.clear(bg="gray")
         con.write("hello world\n", (10, 5), fg = "bright_red")
+        print win32event.WaitForSingleObject(con.inbuf, 10000)
+
         for i in range(10):
             e = con.read()
             con.write(repr(e) + "\n", fg = "white")

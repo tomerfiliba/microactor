@@ -4,7 +4,7 @@ from ..transports import ClosedFile, DetachedFile
 from ..transports import OverlappingRequestError 
 msvcrt = safe_import("msvcrt")
 win32file = safe_import("win32file")
-windows = safe_import("microactors.utils.windows")
+win32iocp = safe_import("microactors.arch.windows.iocp")
 pywintypes = safe_import("pywintypes")
 
 
@@ -68,7 +68,7 @@ class StreamTransport(BaseTransport):
         except Exception as ex:
             self.reactor._discard_overlapped(overlapped)
             self._ongoing_read = False
-            if isinstance(ex, pywintypes.error) and ex.winerror in windows.BROKEN_PIPE_ERRORS:
+            if isinstance(ex, pywintypes.error) and ex.winerror in win32iocp.BROKEN_PIPE_ERRORS:
                 # why can't windows be just a little consistent?! 
                 # why can't a set of APIs have the same semantics for all kinds
                 # of handles? grrrrr

@@ -52,6 +52,10 @@ class Process(object):
         return self.wait_dfr
 
 
+class ProcessPool(object):
+    pass
+
+
 class ProcessSubsystem(Subsystem):
     NAME = "proc"
     WINDOWS_POLL_INTERVAL = 0.2

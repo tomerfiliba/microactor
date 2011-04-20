@@ -1,6 +1,7 @@
 import sys
 import socket
 from microactor.subsystems import Subsystem
+from microactor.subsystems.net import NetSubsystem
 from microactor.utils import reactive, rreturn, safe_import
 from .transports import (ListeningSocketTransport, ConnectingSocketTransport, 
     SslHandshakingTransport, SslListeninglSocketTransport, DatagramSocketTransport,
@@ -8,14 +9,7 @@ from .transports import (ListeningSocketTransport, ConnectingSocketTransport,
 ssl = safe_import("ssl")
 
 
-class NetSubsystem(Subsystem):
-    NAME = "net"
-    
-    def resolve(self, host):
-        return self.reactor.threadpool.call(socket.gethostbyname, host)
-    def resolve_ex(self, host):
-        return self.reactor.threadpool.call(socket.gethostbyname_ex, host)
-
+class NetSubsystem(NetSubsystem):
     @reactive
     def connect_tcp(self, host, port, timeout = None):
         yield self.reactor.started

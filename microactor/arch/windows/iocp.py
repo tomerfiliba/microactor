@@ -1,8 +1,6 @@
 import os
 import time
 import itertools
-#import ctypes
-import socket # to initialize winsock
 import msvcrt
 import win32file
 import win32pipe
@@ -69,6 +67,7 @@ class IOCP(object):
                 break
         return events        
 
+
 _pipe_id_counter = itertools.count()
 
 def create_overlapped_pipe():
@@ -94,6 +93,7 @@ def create_overlapped_pipe():
     
     return read_handle, write_handle
 
+
 OPEN_MODE_TABLE = {
     "r" : (win32con.GENERIC_READ, win32con.OPEN_EXISTING, "r"),
     "r+" : (win32con.GENERIC_READ | win32con.GENERIC_WRITE, win32con.OPEN_EXISTING, "rw"),
@@ -117,35 +117,7 @@ def open_overlapped(filename, mode = "r"):
     return os.fdopen(fd, mode2), access
 
 
-#
-# references: 
-# * http://twistedmatrix.com/trac/browser/trunk/twisted/internet/iocpreactor/iocpsupport/wsarecv.pxi
-# * http://www.google.com/codesearch/p?hl=en#T4zviHTmECg/trunk/exeLearning/twisted/internet/iocpreactor/_iocp.c&q=WSASendTo%20lang:python&d=5&l=348
-#
-#winsockdll = None
-#def _init_winsockdll():
-#    global winsockdll
-#    if not winsockdll:
-#        winsockdll = ctypes.WinDLL("Ws2_32.dll")
-#
-#def WSASendTo():
-#    _init_winsockdll()
-#    raise NotImplementedError()
-#
-#def WSARecvFrom():
-#    _init_winsockdll()
-#    raise NotImplementedError()
 
-
-
-if __name__ == "__main__":
-    rh, wh = create_overlapped_pipe()
-    print rh, wh
-    print win32file.WriteFile(wh, "hello world", None)
-    print win32file.ReadFile(rh, 100, None)
-    #wh.Close()
-    rh.close()
-    print win32file.WriteFile(wh, "hello world", None)
 
 
 
