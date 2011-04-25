@@ -1,7 +1,6 @@
 import os
 import time
 import itertools
-import msvcrt
 import win32file
 import win32pipe
 import win32con
@@ -14,9 +13,11 @@ if not hasattr(win32file, "CreateIoCompletionPort"):
 
 class IOCP(object):
     def __init__(self):
-        self._port = win32file.CreateIoCompletionPort(win32file.INVALID_HANDLE_VALUE, None, 0, 0)
+        self._port = win32file.CreateIoCompletionPort(win32file.INVALID_HANDLE_VALUE, 
+            None, 0, 0)
         self._key = itertools.count()
         self._post_key = self._key.next()
+        self._post_overlapped = win32file.OVERLAPPED()
     def __repr__(self):
         return "IOCP(%r)" % (self._port,)
     
@@ -27,11 +28,10 @@ class IOCP(object):
         win32file.CreateIoCompletionPort(handle, self._port, key, 0)
         return key
     
-    def post(self, key = None, size = 0, overlapped = None):
+    def post(self):
         """will cause wait() to return with the given information"""
-        if key is None:
-            key = self._post_key
-        win32file.PostQueuedCompletionStatus(self._port, size, key, overlapped)
+        win32file.PostQueuedCompletionStatus(self._port, 0, self._post_key, 
+            self._post_overlapped)
     
     def wait_event(self, timeout):
         """returns (size, overlapped) on success, None on timeout"""
@@ -65,11 +65,13 @@ class IOCP(object):
 _pipe_id_counter = itertools.count()
 
 def create_overlapped_pipe():
-    pipe_name = r"\\.\pipe\anon_%s_%s_%s" % (os.getpid(), time.time(), _pipe_id_counter.next())
+    pipe_name = r"\\.\pipe\anon_%s_%s_%s" % (os.getpid(), time.time(), 
+        _pipe_id_counter.next())
     FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000
 
     read_handle = win32pipe.CreateNamedPipe(pipe_name,
-                         win32con.PIPE_ACCESS_INBOUND | win32con.FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                         win32con.PIPE_ACCESS_INBOUND | 
+                            win32con.FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
                          win32con.PIPE_TYPE_BYTE | win32con.PIPE_WAIT,
                          1,             # Number of pipes
                          16384,         # Out buffer size
@@ -118,19 +120,10 @@ class WinFile(object):
         return fobj, access
     def fileno(self):
         return self.handle
-    def flush(self):
-        win32file.FlushFileBuffers(self.handle)
     def close(self):
         if self.handle:
             self.handle.close()
             self.handle = None
-    def read(self, count):
-        ov = win32file.OVERLAPPED()
-        _, data = win32file.ReadFile(self.handle, count, ov)
-        return data
-    def write(self, data):
-        ov = win32file.OVERLAPPED()
-        win32file.WriteFile(self.handle, data, ov)
     def seek(self, offset, whence = 0):
         if whence == 0:
             whence = win32file.FILE_BEGIN

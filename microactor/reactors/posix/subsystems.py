@@ -5,7 +5,8 @@ from microactor.subsystems.net import NetSubsystem
 from microactor.utils import reactive, rreturn, safe_import
 from .transports import (ListeningSocketTransport, ConnectingSocketTransport, 
     SslHandshakingTransport, SslListeninglSocketTransport, DatagramSocketTransport,
-    PipeTransport)
+    PipeTransport, FileTransport)
+import os
 ssl = safe_import("ssl")
 
 
@@ -108,14 +109,54 @@ class PosixNetSubsystem(NetSubsystem):
         rreturn(trns2)
 
 
-class LowlevelIOSubsystem(Subsystem):
-    NAME = "_io"
+class IOSubsystem(Subsystem):
+    NAME = "io"
+
+    def _init(self):
+        self._stdin = None
+        self._stdout = None
+        self._stderr = None
     
-    def wrap_pipe(self, fileobj, mode):
+    @property
+    def stdin(self):
+        if not self._stdin:
+            self._stdin = PipeTransport(self, sys.stdin, "r")
+        return self._stdin
+    
+    @property
+    def stdout(self):
+        if not self._stdout:
+            self._stdout = PipeTransport(self, sys.stdout, "w")
+        return self._stdout
+    
+    @property
+    def stderr(self):
+        if not self._stderr:
+            self._stderr = PipeTransport(self, sys.stderr, "w")
+        return self._stderr
+
+    def _wrap_pipe(self, fileobj, mode):
         return PipeTransport(self.reactor, fileobj, mode)
+    
+    @reactive
+    def open(self, filename, mode = "r"):
+        yield self.reactor.started
+        CONV = {"r" : "r", "w" : "w", "a" : "w", "r+" : "rw", "w+" : "rw", "a+" : "rw"}
+        mode2 = CONV[mode.lower().replace("b", "").replace("t", "")]
+        fileobj = open(filename, mode, bufsize = 0)
+        rreturn(FileTransport(self.reactor, fileobj, mode2))
 
+    @reactive
+    def pipe(self):
+        yield self.reactor.started
+        rfd, wfd = os.pipe()
+        rf = os.fdopen(rfd, "r")
+        wf = os.fdopen(wfd, "w")
+        rtrns = PipeTransport(self.reactor, rf, "r")
+        wtrns = PipeTransport(self.reactor, wf, "w")
+        rreturn((rtrns, wtrns))
 
-POSIX_SUBSYSTEMS = [LowlevelIOSubsystem, PosixNetSubsystem]
+POSIX_SUBSYSTEMS = [IOSubsystem, PosixNetSubsystem]
 
 
 

@@ -163,7 +163,10 @@ class PipeTransport(StreamTransport):
             self.flush = self._wrong_mode
 
     def fileno(self):
-        return self.fileobj.handle
+        if hasattr(self.fileobj, "handle"):
+            return self.fileobj.handle
+        else:
+            return msvcrt.get_osfhandle(self.fileobj.fileno())
     @staticmethod
     def _wrong_mode(*args):
         raise IOError("file mode does not permit this operation")
@@ -207,6 +210,7 @@ class FileTransport(PipeTransport):
     @reactive
     def write(self, data):
         yield PipeTransport.write(self, data)
+        # XXX: this should be done within write.write_finished!!
         self._position += len(data)
 
 
@@ -256,6 +260,13 @@ class ListeningSocketTransport(BaseSocketTransport):
             self.reactor._discard_overlapped(overlapped)
             dfr.throw(ex)
         return dfr
+
+
+class ConsoleInputTransport(BaseTransport):
+    def close(self):
+        pass
+    def read(self):
+        return self.reactor.io._request_console_read()
 
 
 

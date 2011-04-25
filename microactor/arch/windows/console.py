@@ -99,6 +99,7 @@ class ConsoleError(OSError):
 
 class Console(object):
     def __init__(self):
+        self.inbuf = None
         if not self.is_attached():
             raise ConsoleError("process not attached to a console")
         self.inbuf = win32console.PyConsoleScreenBufferType(
@@ -108,31 +109,25 @@ class Console(object):
         self.clear_events()
         self.cursor = Cursor(self.outbuf)
         self.screen = Screen(self.outbuf)
-    
-    def fileno(self):
-        raise ConsoleError("console doesn't have a fileno")
-    def close(self):
-        if self.inbuf:
-            self.inbuf.close()
-            self.inbuf = None
-        if self.outbuf:
-            self.outbuf.close()
-            self.outbuf = None
-    
-    @contextmanager
-    def raw_mode(self):
-        orig_mode = self.inbuf.GetConsoleMode()
-        orig_attrs = self.cursor.get_attributes()
-        self.inbuf.SetConsoleMode(orig_mode & 
+        self._orig_mode = self.inbuf.GetConsoleMode()
+        self._orig_attrs = self.cursor.get_attributes()
+        self.inbuf.SetConsoleMode(self._orig_mode & 
             ~win32console.ENABLE_LINE_INPUT & 
             ~win32console.ENABLE_ECHO_INPUT & 
             ~win32console.ENABLE_PROCESSED_INPUT)
-        try:
-            yield
-        finally:
-            self.inbuf.SetConsoleMode(orig_mode)
-            self.cursor.set_attributes(orig_attrs)            
     
+    def __del__(self):
+        self.close()
+    def close(self):
+        if not self.inbuf:
+            return
+        self.inbuf.SetConsoleMode(self._orig_mode)
+        self.cursor.set_attributes(self._orig_attrs)            
+        self.inbuf.close()
+        self.inbuf = None
+        self.outbuf.close()
+        self.outbuf = None
+        
     @classmethod
     def allocate(cls):
         win32console.AllocConsole()
@@ -140,7 +135,7 @@ class Console(object):
     @classmethod
     def is_attached(cls):
         return win32console.GetConsoleWindow() != 0
-       
+    
     def get_events(self):
         return self.inbuf.ReadConsoleInput(100)
     def get_num_of_events(self):
@@ -161,11 +156,10 @@ class Console(object):
 
 
 if __name__ == "__main__":
+    import os, sys
     con = Console()
-    with con.raw_mode():
-        import os, sys
-        ch = os.read(sys.stdin.fileno(), 1)
-        print "got", ch
+    ch = os.read(sys.stdin.fileno(), 1)
+    print "got", ch
 
 
 

@@ -30,9 +30,9 @@ class Process(object):
         self.reactor = reactor
         self.cmdline = cmdline
         self._proc = proc
-        self.stdin = BufferedTransport(self.reactor._io.wrap_pipe(proc.stdin, "w"))
-        self.stdout = BufferedTransport(self.reactor._io.wrap_pipe(proc.stdout, "r"))
-        self.stderr = BufferedTransport(self.reactor._io.wrap_pipe(proc.stderr, "r"))
+        self.stdin = BufferedTransport(self.reactor.io._wrap_pipe(proc.stdin, "w"))
+        self.stdout = BufferedTransport(self.reactor.io._wrap_pipe(proc.stdout, "r"))
+        self.stderr = BufferedTransport(self.reactor.io._wrap_pipe(proc.stderr, "r"))
         self.pid = proc.pid
         self.wait_dfr = ReactorDeferred(self.reactor)
     def __repr__(self):
