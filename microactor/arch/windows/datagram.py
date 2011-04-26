@@ -42,7 +42,7 @@ class SockAddrIP4(ctypes.Structure):
 
 
 def deref(addr, typ):
-    return ctypes.cast(ctypes.c_void_p(addr), PTR(typ)).contents
+    return ctypes.cast(addr, PTR(typ)).contents
 
 _overlapped_offset = None
 def get_overlapped_offset():
