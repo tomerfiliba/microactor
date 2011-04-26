@@ -7,6 +7,8 @@ class Subsystem(object):
     
     def _init(self):
         pass
+    def _unload(self):
+        pass
     
     @classmethod
     def supported(cls):

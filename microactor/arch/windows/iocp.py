@@ -6,7 +6,11 @@ import win32pipe
 import win32con
 
 
-BROKEN_PIPE_ERRORS = (109, 232)
+IGNORED_ERRORS = (
+    109,    # ERROR_BROKEN_PIPE
+    232,    # ERROR_NO_DATA "The pipe is being closed"
+    38,     # ERROR_HANDLE_EOF
+)
 
 if not hasattr(win32file, "CreateIoCompletionPort"):
     raise ImportError("win32file is missing CreateIoCompletionPort")
@@ -40,13 +44,18 @@ class IOCP(object):
         if rc == win32con.WAIT_TIMEOUT:
             return None
         elif rc == 0:
-            return size, overlapped
-        elif rc in BROKEN_PIPE_ERRORS:
+            if overlapped is self._post_overlapped:
+                # ignore the overlapped -- it's was enqueued by post()
+                return None
+            else:
+                return size, overlapped
+        elif rc in IGNORED_ERRORS:
             return size, overlapped
         else:
             ex = WindowsError(rc)
             ex.errno = ex.winerror = rc
             raise ex
+        
     
     def get_events(self, timeout):
         events = []

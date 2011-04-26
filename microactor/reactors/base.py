@@ -20,6 +20,7 @@ class BaseReactor(object):
         self._active = False
         self._jobs = MinHeap()
         self._callbacks = []
+        self._subsystems = []
         self.started = ReactorDeferred(weakref.proxy(self))
         for factory in self.SUBSYSTEMS:
             self.install_subsystem(factory)
@@ -37,6 +38,12 @@ class BaseReactor(object):
             raise ValueError("attribute %r already exists" % (subs.NAME,))
         setattr(self, subs.NAME, subs)
         subs._init()
+        self._subsystems.append(subs.NAME)
+    
+    def uninstall_subsystem(self, name):
+        subs = getattr(self, name)
+        subs._unload()
+        #subs.reactor = None
     
     def start(self):
         if self._active:
@@ -54,6 +61,8 @@ class BaseReactor(object):
             return
         self._active = False
         self.started.cancel()
+        for name in self._subsystems:
+            self.call(self.uninstall_subsystem, name)
         self._wakeup()
     
     def run(self, func):

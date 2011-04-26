@@ -54,17 +54,32 @@ class StreamTransport(BaseTransport):
     _get_write_overlapped = _get_read_overlapped
     
     def read(self, count):
+        # XXX:
+        # The ReadFile function may fail with ERROR_INVALID_USER_BUFFER or 
+        # ERROR_NOT_ENOUGH_MEMORY whenever there are too many outstanding 
+        # asynchronous I/O requests.
+        #
+        # XXX:
+        # http://support.microsoft.com/kb/156932 -- ReadFile may return 
+        # immediately, need to check that condition
+        
         if self._ongoing_read:
             raise OverlappingRequestError("overlapping reads")
         self._ongoing_read = True
         
         def read_finished(size, _):
-            data = str(buf[:size])
+            if size == 0:
+                data = None   # EOF
+            else:
+                data = bytes(buf[:size])
             self._ongoing_read = False
             dfr.set(data)
         
         dfr = ReactorDeferred(self.reactor)
         count = min(count, self.MAX_READ_SIZE)
+        if count <= 0:
+            dfr.set("")
+            return dfr
         overlapped = self._get_read_overlapped(read_finished)
         try:
             buf = win32file.AllocateReadBuffer(count)
@@ -72,7 +87,7 @@ class StreamTransport(BaseTransport):
         except Exception as ex:
             self.reactor._discard_overlapped(overlapped)
             self._ongoing_read = False
-            if isinstance(ex, pywintypes.error) and ex.winerror in win32iocp.BROKEN_PIPE_ERRORS:
+            if isinstance(ex, pywintypes.error) and ex.winerror in win32iocp.IGNORED_ERRORS:
                 # why can't windows be just a little consistent?! 
                 # why can't a set of APIs have the same semantics for all kinds
                 # of handles? grrrrr
@@ -83,6 +98,15 @@ class StreamTransport(BaseTransport):
     
 
     def write(self, data):
+        # XXX:
+        # The WriteFile function may fail with ERROR_INVALID_USER_BUFFER or 
+        # ERROR_NOT_ENOUGH_MEMORY whenever there are too many outstanding 
+        # asynchronous I/O requests.
+        #
+        # XXX:
+        # http://support.microsoft.com/kb/156932 -- WriteFile may return 
+        # immediately, need to check that condition
+        
         if self._ongoing_write:
             raise OverlappingRequestError("overlapping writes")
 
@@ -182,36 +206,43 @@ class PipeTransport(StreamTransport):
 
 
 class FileTransport(PipeTransport):
-    __slots__ = ["_position"]
+    __slots__ = ["_rpos"]
     def __init__(self, reactor, fileobj, mode, auto_flush = True):
         PipeTransport.__init__(self, reactor, fileobj, mode, auto_flush)
-        self._position = 0
+        self._rpos = 0
     def tell(self):
-        return self._position
+        self._rpos = self.fileobj.tell()
+        return self._rpos
     def seek(self, offset, whence = 0):
         if "w" in self.mode:
             yield self.flush()
         self.fileobj.seek(offset, whence)
-        self._position = self.fileobj.tell()
+        self._rpos = self.fileobj.tell()
 
     def _get_read_overlapped(self, callback):
         ov = self.reactor._get_overlapped(callback)
-        ov.Offset = self._position & 0xFFFFFFFF
-        ov.OffsetHigh = (self._position >> 32) & 0xFFFFFFFF
+        ov.Offset = self._rpos & 0xFFFFFFFF
+        ov.OffsetHigh = (self._rpos >> 32) & 0xFFFFFFFF
         return ov
-    _get_write_overlapped = _get_read_overlapped
+
+    def _get_write_overlapped(self, callback):
+        ov = self.reactor._get_overlapped(callback)
+        # To write to the end of file, specify both the Offset and OffsetHigh 
+        # members of the OVERLAPPED structure as 0xFFFFFFFF
+        ov.Offset = 0xFFFFFFFF
+        ov.OffsetHigh = 0xFFFFFFFF
+        return ov
 
     @reactive
     def read(self, count):
         data = yield PipeTransport.read(self, count)
-        self._position += len(data)
+        if data:
+            self._rpos += len(data)
         rreturn(data)
     
     @reactive
     def write(self, data):
         yield PipeTransport.write(self, data)
-        # XXX: this should be done within write.write_finished!!
-        self._position += len(data)
 
 
 class BaseSocketTransport(BaseTransport):

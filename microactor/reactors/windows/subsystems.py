@@ -55,10 +55,20 @@ class IOSubsystem(Subsystem):
             self._console_thd = threading.Thread(target = self._console_input_thread)
             self._console_thd.start()
         else:
+            # XXX:
+            # need to check if stdin has FLAG_FILE_FLAG_OVERLAPPED. if so, 
+            # PipeStream will handle it fine. otherwise, let's start a thread
+            # that just blocks on sys.stdin.read(1000) on that handle, and
+            # enqueue the incoming data
             self.console = None
         self._stdin = None
         self._stdout = None
         self._stderr = None
+    
+    def _unload(self):
+        if self.console:
+            self.console.close()
+            self.console = None
     
     @property
     def stdin(self):
