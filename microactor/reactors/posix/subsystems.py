@@ -143,7 +143,7 @@ class IOSubsystem(Subsystem):
         yield self.reactor.started
         CONV = {"r" : "r", "w" : "w", "a" : "w", "r+" : "rw", "w+" : "rw", "a+" : "rw"}
         mode2 = CONV[mode.lower().replace("b", "").replace("t", "")]
-        fileobj = open(filename, mode, bufsize = 0)
+        fileobj = open(filename, mode, 0)
         rreturn(FileTransport(self.reactor, fileobj, mode2))
 
     @reactive
