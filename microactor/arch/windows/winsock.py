@@ -40,7 +40,13 @@ class BaseSockAddr(ctypes.Structure):
     def __init__(self, *args, **kwargs):
         super(BaseSockAddr, self).__init__(self.FAMILY, *args, **kwargs)
     def __str__(self):
-        return "%s:%s" % (inet_ntop(self.family, self.addr), self.port)
+        return "%s:%s" % (self.addr_str, self.port)
+    def _get_addr_str(self):
+        return inet_ntop(self.family, self.addr)
+    def _set_addr_str(self, addrstr):
+        self.addr = inet_pton(self.family, addrstr)
+    addr_str = property(_get_addr_str, _set_addr_str)
+    
 
 class SockAddrIP4(BaseSockAddr):
     FAMILY = socket.AF_INET
@@ -82,7 +88,7 @@ def _get_inner_overlapped(ov):
 #===============================================================================
 _inet_pton = winsockdll.inet_pton
 _inet_pton.argtypes = [
-    ctypes.c_int,                   # INT  Family
+    ctypes.c_int,                   # INT Family
     ctypes.c_char_p,                # PCTSTR pszAddrString
     ctypes.c_void_p,                # OUT PVOID pAddrBuf
 ]
@@ -103,7 +109,7 @@ def inet_pton(family, addrstr):
 #===============================================================================
 _inet_ntop = winsockdll.inet_ntop
 _inet_ntop.argtypes = [
-    ctypes.c_int,                   # INT  Family
+    ctypes.c_int,                   # INT Family
     ctypes.c_char_p,                # PVOID pAddrBuf
     ctypes.c_char_p,                # OUT PTSTR pAddrString
     ctypes.c_size_t,                # size_t StringBufSize

@@ -380,7 +380,7 @@ class DatagramSocketTransport(BaseSocketTransport):
         self._write_req = None
 
     def getsockname(self):
-        return self.fileno.getsockname()
+        return self.sock.getsockname()
 
     def recvfrom(self, count = -1):
         if self._read_req:

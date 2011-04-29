@@ -1,6 +1,7 @@
 import os
 import time
 import itertools
+import win32api
 import win32file
 import win32pipe
 import win32con
@@ -55,7 +56,6 @@ class IOCP(object):
             ex = WindowsError(rc)
             ex.errno = ex.winerror = rc
             raise ex
-        
     
     def get_events(self, timeout):
         events = []
@@ -70,6 +70,17 @@ class IOCP(object):
                 break
         return events        
 
+
+def validate_handle(handle):
+    try:
+        win32api.GetHandleInformation(handle)
+    except win32api.error as ex:
+        if ex.winerror == 6: # ERROR_INVALID_HANDLE
+            return False
+        else:
+            raise
+    else:
+        return True
 
 _pipe_id_counter = itertools.count()
 
@@ -151,12 +162,14 @@ class WinFile(object):
 
 
 if __name__ == "__main__":
-    f, access = WinFile.open("test.txt", "w")
-    print f
-    f.write("hello")
-    f.seek(5)
-    f.write("world")
-    print f.tell()
-    f.close()
+    import socket, sys, msvcrt
+    s=socket.socket()
+    port=IOCP()
+    #port.register(msvcrt.get_osfhandle(sys.stdin.fileno())) #(87, 'CreateIoCompletionPort', 'The parameter is incorrect.')
+    port.register(s.fileno())
+    #port.register(s.fileno()) #(87, 'CreateIoCompletionPort', 'The parameter is incorrect.')
+
+
+    
 
 

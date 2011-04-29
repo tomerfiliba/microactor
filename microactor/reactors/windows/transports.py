@@ -1,7 +1,7 @@
 import socket
 from microactor.utils import safe_import, ReactorDeferred, reactive, rreturn
 from ..transports import ClosedFile, DetachedFile
-from ..transports import OverlappingRequestError 
+from ..transports import TransportError, OverlappingRequestError 
 msvcrt = safe_import("msvcrt")
 win32file = safe_import("win32file")
 win32iocp = safe_import("microactor.arch.windows.iocp")
@@ -240,11 +240,6 @@ class FileTransport(PipeTransport):
         if data:
             self._rpos += len(data)
         rreturn(data)
-    
-    @reactive
-    def write(self, data):
-        yield PipeTransport.write(self, data)
-
 
 class BaseSocketTransport(BaseTransport):
     __slots__ = ["sock"]
@@ -294,12 +289,71 @@ class ListeningSocketTransport(BaseSocketTransport):
         return dfr
 
 
-class SocketDatagramTransport(BaseTransport):
-    def sendto(self):
-        pass
+class DatagramSocketTransport(BaseTransport):
+    __slots__ = ["_ongoing_write", "_ongoing_read"]
+    MAX_DATAGRAM_SIZE = 4096
+
+    def __init__(self, reactor, sock):
+        BaseSocketTransport.__init__(self, reactor, sock)
+        self._ongoing_read = False
+        self._ongoing_write = False
     
-    def recvfrom(self):
-        pass
+    def getsockname(self):
+        return self.sock.getsockname()
+
+    def sendto(self, addr, data):
+        if len(data) > self.MAX_DATAGRAM_SIZE:
+            raise TransportError("data too long")
+        if self._ongoing_write:
+            raise OverlappingRequestError("overlapping sendto")
+        self._ongoing_write = True
+        
+        def write_finished(size, _):
+            self._ongoing_write = False
+            dfr.set(size) # return actual sent size
+        
+        dfr = ReactorDeferred(self.reactor)
+        overlapped = self.reactor._get_overlapped(write_finished)
+        try:
+            if self.sock.family == socket.AF_INET:
+                winsock.WSASendTo4(self.fileno(), data, addr, overlapped)
+            elif self.sock.family == socket.AF_INET6:
+                winsock.WSASendTo6(self.fileno(), data, addr, overlapped)
+            else:
+                raise socket.error("WSARecvFrom: only IPv4 or IPv6 supported")
+        except Exception as ex:
+            self._ongoing_read = False
+            self.reactor._discard_overlapped(overlapped)
+            dfr.throw(ex)
+        return dfr
+    
+    def recvfrom(self, count = -1):
+        if count < 0 or count > self.MAX_DATAGRAM_SIZE:
+            count = self.MAX_DATAGRAM_SIZE
+        if self._ongoing_read:
+            raise OverlappingRequestError("overlapping recvfrom")
+        self._ongoing_read = True
+        
+        def read_finished(size, _):
+            self._ongoing_read = False
+            data = buf[:size]
+            addrinfo = (sockaddr.addr_str, sockaddr.port)
+            dfr.set((data, addrinfo))
+        
+        dfr = ReactorDeferred(self.reactor)
+        overlapped = self.reactor._get_overlapped(read_finished)
+        try:
+            if self.sock.family == socket.AF_INET:
+                buf, sockaddr = winsock.WSARecvFrom4(self.fileno(), count, overlapped)
+            elif self.sock.family == socket.AF_INET6:
+                buf, sockaddr = winsock.WSARecvFrom6(self.fileno(), count, overlapped)
+            else:
+                raise socket.error("WSARecvFrom: only IPv4 or IPv6 supported")
+        except Exception as ex:
+            self._ongoing_read = False
+            self.reactor._discard_overlapped(overlapped)
+            dfr.throw(ex)
+        return dfr
 
 
 class ConsoleInputTransport(BaseTransport):
