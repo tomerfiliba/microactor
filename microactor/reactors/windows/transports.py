@@ -5,6 +5,7 @@ from ..transports import OverlappingRequestError
 msvcrt = safe_import("msvcrt")
 win32file = safe_import("win32file")
 win32iocp = safe_import("microactor.arch.windows.iocp")
+winsock = safe_import("microactor.arch.windows.winsock")
 pywintypes = safe_import("pywintypes")
 
 
@@ -291,6 +292,14 @@ class ListeningSocketTransport(BaseSocketTransport):
             self.reactor._discard_overlapped(overlapped)
             dfr.throw(ex)
         return dfr
+
+
+class SocketDatagramTransport(BaseTransport):
+    def sendto(self):
+        pass
+    
+    def recvfrom(self):
+        pass
 
 
 class ConsoleInputTransport(BaseTransport):
