@@ -148,7 +148,7 @@ class Console(object):
         return self.outbuf.WriteConsole(text)
     def wait_input(self, timeout = None):
         if timeout is None or timeout < 0:
-            timeout = -1
+            timeout = -1    # INFITINE
         else:
             timeout = int(timeout * 1000)
         rc = win32event.WaitForSingleObject(self.inbuf, timeout)

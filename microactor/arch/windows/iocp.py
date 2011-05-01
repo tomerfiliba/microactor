@@ -1,6 +1,7 @@
 import os
 import time
 import itertools
+import ctypes
 import win32api
 import win32file
 import win32pipe
@@ -11,11 +12,10 @@ IGNORED_ERRORS = (
     109,    # ERROR_BROKEN_PIPE
     232,    # ERROR_NO_DATA "The pipe is being closed"
     38,     # ERROR_HANDLE_EOF
+    64,     # ERROR_NETNAME_DELETED
 )
 
-EOF_ERRORS = (
-    995,    # WSA_OPERATION_ABORTED
-)
+995 # WSA_OPERATION_ABORTED
 
 if not hasattr(win32file, "CreateIoCompletionPort"):
     raise ImportError("win32file is missing CreateIoCompletionPort")
@@ -64,23 +64,22 @@ class IOCP(object):
                 # ignore the overlapped -- it's was enqueued by post()
                 return None
             else:
-                return size, overlapped
+                return size, overlapped, None
         elif rc in IGNORED_ERRORS:
-            return size, overlapped
-        elif rc in EOF_ERRORS:
-            print "!! WSA_OPERATION_ABORTED", overlapped
-            return 0, overlapped
+            return size, overlapped, None
         else:
-            ex = WindowsError(rc)
-            ex.errno = ex.winerror = rc
-            raise ex
+            ex = ctypes.WinError(rc)
+            if not overlapped:
+                raise ex
+            else:
+                return size, overlapped, ex
     
     def get_events(self, timeout):
         events = []
         tmax = time.time() + timeout
         while True:
             res = self.wait_event(timeout)
-            if not res:
+            if not res: # timed out or awakened by post()
                 break
             events.append(res)
             timeout = 0

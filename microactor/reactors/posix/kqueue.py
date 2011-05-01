@@ -37,6 +37,7 @@ class KqueueReactor(PosixPollingReactor):
     def __init__(self):
         PosixPollingReactor.__init__(self)
         self._poller = KqueuePoller()
+        self._install_builtin_subsystems()
     
     @classmethod
     def supported(cls):

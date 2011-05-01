@@ -13,6 +13,7 @@ class IocpReactor(BaseReactor):
         self._port = win32iocp.IOCP()
         self._transports = {}
         self._overlap_callbacks = {}
+        self._install_builtin_subsystems()
     
     @classmethod
     def supported(cls):
@@ -51,11 +52,9 @@ class IocpReactor(BaseReactor):
         self._overlap_callbacks.pop(overlapped, None)
 
     def _handle_transports(self, timeout):
-        for size, overlapped in self._port.get_events(timeout):
-            if not overlapped:
-                continue
+        for size, overlapped, exc in self._port.get_events(timeout):
             cb = self._overlap_callbacks.pop(overlapped)
-            self.call(cb, size, overlapped)
+            self.call(cb, size, exc)
 
 
 

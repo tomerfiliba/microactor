@@ -35,7 +35,7 @@ class SocketServer(object):
                 handler = self.handler_factory(self.reactor, weakref.proxy(self), conn)
                 self.clients.add(handler)
                 self.reactor.call(handler.start)
-        except socket.error:
+        except EnvironmentError:
             if not self.active:
                 pass # assume it's because listener has closed
             else:
@@ -63,7 +63,6 @@ class NetSubsystem(Subsystem):
     @reactive
     def resolve(self, hostname, family = socket.AF_INET):
         res = yield self.getaddrinfo(hostname, family = family)
-        print "!!resolve", res
         rreturn(res[0][4][0])
 
     @reactive

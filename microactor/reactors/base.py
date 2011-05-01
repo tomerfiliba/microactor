@@ -20,10 +20,9 @@ class BaseReactor(object):
         self._active = False
         self._jobs = MinHeap()
         self._callbacks = []
+        #self._rcallbacks = []
         self._subsystems = []
         self.started = ReactorDeferred(weakref.proxy(self))
-        for factory in self.SUBSYSTEMS:
-            self.install_subsystem(factory)
 
     @classmethod
     def supported(cls):
@@ -44,6 +43,10 @@ class BaseReactor(object):
         subs = getattr(self, name)
         subs._unload()
         #subs.reactor = None
+    
+    def _install_builtin_subsystems(self):
+        for factory in self.SUBSYSTEMS:
+            self.install_subsystem(factory)
     
     def start(self):
         if self._active:
@@ -109,17 +112,4 @@ class BaseReactor(object):
 
 
     
-
-
-
-
-
-
-
-
-
-
-
-
-
 

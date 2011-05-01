@@ -1,6 +1,7 @@
-from .deferred import reactive, rreturn
 import sys
 import codecs
+from .deferred import reactive, rreturn
+from microactor.reactors.transports import TransportClosed
 
 
 class StreamTransportAdapter(object):
@@ -69,7 +70,10 @@ class BufferedTransport(StreamTransportAdapter):
     @reactive
     def _fill_rbuf(self, count):
         while count > 0:
-            data = yield self.transport.read(count)
+            try:
+                data = yield self.transport.read(count)
+            except TransportClosed:
+                data = None
             if not data:
                 rreturn(True)
             self._rbuf += data

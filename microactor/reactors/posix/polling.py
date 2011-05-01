@@ -9,6 +9,7 @@ class PollReactor(PosixPollingReactor):
     def __init__(self):
         PosixPollingReactor.__init__(self)
         self._poller = select.poll()
+        self._install_builtin_subsystems()
 
     @classmethod
     def supported(cls):
@@ -34,6 +35,7 @@ class EpollReactor(PosixPollingReactor):
     def __init__(self):
         PosixPollingReactor.__init__(self)
         self._poller = select.epoll()
+        self._install_builtin_subsystems()
 
     @classmethod
     def supported(cls):

@@ -22,9 +22,6 @@ class BaseTransport(object):
     def fileno(self):
         raise NotImplementedError()
 
-    def on_error(self, exc):
-        pass
-
 
 class StreamTransport(BaseTransport):
     MAX_READ_SIZE = 32000
@@ -68,13 +65,16 @@ class StreamTransport(BaseTransport):
             raise OverlappingRequestError("overlapping reads")
         self._ongoing_read = True
         
-        def read_finished(size, _):
+        def read_finished(size, exc):
             if size == 0:
                 data = None   # EOF
             else:
                 data = bytes(buf[:size])
             self._ongoing_read = False
-            dfr.set(data)
+            if exc:
+                dfr.throw(exc)
+            else:
+                dfr.set(data)
         
         dfr = ReactorDeferred(self.reactor)
         count = min(count, self.MAX_READ_SIZE)
@@ -113,9 +113,11 @@ class StreamTransport(BaseTransport):
         self._ongoing_write = True
         remaining = [data]
         
-        def write_finished(size, _):
+        def write_finished(size, exc):
             remaining[0] = remaining[0][size:]
-            if not remaining[0]:
+            if exc:
+                dfr.throw(exc)
+            elif not remaining[0]:
                 self._ongoing_write = False
                 dfr.set()
             else:
@@ -270,8 +272,12 @@ class ListeningSocketTransport(BaseSocketTransport):
         return self.sock.getsockname()
     
     def accept(self):
-        def accept_finished(size, _):
-            dfr.set(trns)
+        def accept_finished(size, exc):
+            if exc:
+                self.reactor.call(trns.close)
+                dfr.throw(exc)
+            else:
+                dfr.set(trns)
         
         dfr = ReactorDeferred(self.reactor)
         overlapped = self.reactor._get_overlapped(accept_finished)
@@ -307,9 +313,12 @@ class DatagramSocketTransport(BaseSocketTransport):
             raise OverlappingRequestError("overlapping sendto")
         self._ongoing_write = True
         
-        def write_finished(size, _):
+        def write_finished(size, exc):
             self._ongoing_write = False
-            dfr.set(size) # return actual sent size
+            if exc:
+                dfr.throw(exc)
+            else:
+                dfr.set(size) # return actual sent size
         
         dfr = ReactorDeferred(self.reactor)
         overlapped = self.reactor._get_overlapped(write_finished)
@@ -328,11 +337,14 @@ class DatagramSocketTransport(BaseSocketTransport):
             raise OverlappingRequestError("overlapping recvfrom")
         self._ongoing_read = True
         
-        def read_finished(size, _):
+        def read_finished(size, exc):
             self._ongoing_read = False
-            data = buf[:size]
-            addrinfo = (sockaddr.addr_str, sockaddr.port)
-            dfr.set((data, addrinfo))
+            if exc:
+                dfr.throw(exc)
+            else:
+                data = buf[:size]
+                addrinfo = (sockaddr.addr_str, sockaddr.port)
+                dfr.set((data, addrinfo))
         
         dfr = ReactorDeferred(self.reactor)
         overlapped = self.reactor._get_overlapped(read_finished)
@@ -348,10 +360,26 @@ class DatagramSocketTransport(BaseSocketTransport):
 class ConsoleInputTransport(BaseTransport):
     def close(self):
         pass
-    def read(self):
+    def read(self, count):
         return self.reactor.io._request_console_read()
 
 
+class BlockingStreamTransport(BaseTransport):
+    def __init__(self, reactor, fileobj):
+        BaseTransport.__init__(self, reactor)
+        self.fileobj = fileobj
+    def close(self):
+        if self.fileobj:
+            self.fileobj.close()
+            self.fileobj = ClosedFile
+    def fileno(self):
+        return self.fileobj.fileno()
+    def flush(self):
+        self.fileobj.flush()
+    def read(self, count):
+        return self.fileobj.read(count)
+    def write(self, data):
+        return self.fileobj.write(data)
 
 
 

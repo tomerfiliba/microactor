@@ -9,7 +9,8 @@ class SelectReactor(PosixBaseReactor):
         PosixBaseReactor.__init__(self)
         self._read_transports = {}
         self._write_transports = {}
-    
+        self._install_builtin_subsystems()
+
     @classmethod
     def supported(cls):
         return hasattr(select, "select")
