@@ -96,7 +96,6 @@ class StreamTransport(BaseTransport):
             else:
                 dfr.throw(ex)
         return dfr
-    
 
     def write(self, data):
         # XXX:
@@ -275,10 +274,10 @@ class ListeningSocketTransport(BaseSocketTransport):
             dfr.set(trns)
         
         dfr = ReactorDeferred(self.reactor)
-        # this is needed here to register the new socket with its IOCP
         overlapped = self.reactor._get_overlapped(accept_finished)
         try:
             sock = socket.socket(self.sock.family, self.sock.type)
+            # this is needed here to register the new socket with its IOCP
             trns = self.factory(self.reactor, sock)
             fd = sock.fileno()
             buffer = win32file.AllocateReadBuffer(win32file.CalculateSocketEndPointSize(fd))
@@ -289,7 +288,7 @@ class ListeningSocketTransport(BaseSocketTransport):
         return dfr
 
 
-class DatagramSocketTransport(BaseTransport):
+class DatagramSocketTransport(BaseSocketTransport):
     __slots__ = ["_ongoing_write", "_ongoing_read"]
     MAX_DATAGRAM_SIZE = 4096
 
@@ -315,12 +314,7 @@ class DatagramSocketTransport(BaseTransport):
         dfr = ReactorDeferred(self.reactor)
         overlapped = self.reactor._get_overlapped(write_finished)
         try:
-            if self.sock.family == socket.AF_INET:
-                winsock.WSASendTo4(self.fileno(), data, addr, overlapped)
-            elif self.sock.family == socket.AF_INET6:
-                winsock.WSASendTo6(self.fileno(), data, addr, overlapped)
-            else:
-                raise socket.error("WSARecvFrom: only IPv4 or IPv6 supported")
+            winsock.WSASendToSocket(self.sock, data, addr, overlapped)
         except Exception as ex:
             self._ongoing_read = False
             self.reactor._discard_overlapped(overlapped)
@@ -343,12 +337,7 @@ class DatagramSocketTransport(BaseTransport):
         dfr = ReactorDeferred(self.reactor)
         overlapped = self.reactor._get_overlapped(read_finished)
         try:
-            if self.sock.family == socket.AF_INET:
-                buf, sockaddr = winsock.WSARecvFrom4(self.fileno(), count, overlapped)
-            elif self.sock.family == socket.AF_INET6:
-                buf, sockaddr = winsock.WSARecvFrom6(self.fileno(), count, overlapped)
-            else:
-                raise socket.error("WSARecvFrom: only IPv4 or IPv6 supported")
+            buf, sockaddr, _ = winsock.WSARecvFromSocket(self.sock, count, overlapped)
         except Exception as ex:
             self._ongoing_read = False
             self.reactor._discard_overlapped(overlapped)

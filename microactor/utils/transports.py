@@ -117,7 +117,7 @@ class BufferedTransport(StreamTransportAdapter):
         rreturn("".join(chunks))
     
     @reactive
-    def read_until(self, patterns, raise_on_eof = False, include_pattern = False):
+    def read_until(self, patterns, raise_on_eof = False, include_pattern = True):
         if isinstance(patterns, str):
             patterns = [patterns]
         longest_pattern = max(len(p) for p in patterns)
@@ -144,8 +144,8 @@ class BufferedTransport(StreamTransportAdapter):
                 eof = yield self._fill_rbuf(self._rbufsize)
                 last_index = len(self._rbuf) - longest_pattern
     
-    def read_line(self):
-        return self.read_until(("\r\n", "\r", "\n"))
+    def read_line(self, include_newline = True):
+        return self.read_until(("\r\n", "\r", "\n"), include_pattern = include_newline)
     
     @reactive
     def flush(self):

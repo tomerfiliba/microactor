@@ -13,6 +13,10 @@ IGNORED_ERRORS = (
     38,     # ERROR_HANDLE_EOF
 )
 
+EOF_ERRORS = (
+    995,    # WSA_OPERATION_ABORTED
+)
+
 if not hasattr(win32file, "CreateIoCompletionPort"):
     raise ImportError("win32file is missing CreateIoCompletionPort")
 
@@ -20,23 +24,34 @@ class IOCP(object):
     def __init__(self):
         self._port = win32file.CreateIoCompletionPort(win32file.INVALID_HANDLE_VALUE, 
             None, 0, 0)
-        self._key = itertools.count()
-        self._post_key = self._key.next()
         self._post_overlapped = win32file.OVERLAPPED()
+        self._handles = set()
     def __repr__(self):
         return "IOCP(%r)" % (self._port,)
+    
+    def close(self):
+        if self._port:
+            self._port.close()
+            self._port = None
     
     def register(self, handle):
         """registers the given handle with the IOCP. the handle cannot be 
         unregistered later. handle must be a windows handle, not a fileno"""
-        key = self._key.next()
-        win32file.CreateIoCompletionPort(handle, self._port, key, 0)
-        return key
+        if hasattr(handle, "handle"):
+            handle = handle.handle
+        if handle in self._handles:
+            return
+        win32file.CreateIoCompletionPort(handle, self._port, 0, 0)
+        self._handles.add(handle)
+    
+    def unregister(self, handle):
+        if hasattr(handle, "handle"):
+            handle = handle.handle
+        self._handles.discard(handle)
     
     def post(self):
         """will cause wait() to return with the given information"""
-        win32file.PostQueuedCompletionStatus(self._port, 0, self._post_key, 
-            self._post_overlapped)
+        win32file.PostQueuedCompletionStatus(self._port, 0, 0, self._post_overlapped)
     
     def wait_event(self, timeout):
         """returns (size, overlapped) on success, None on timeout"""
@@ -52,6 +67,9 @@ class IOCP(object):
                 return size, overlapped
         elif rc in IGNORED_ERRORS:
             return size, overlapped
+        elif rc in EOF_ERRORS:
+            print "!! WSA_OPERATION_ABORTED", overlapped
+            return 0, overlapped
         else:
             ex = WindowsError(rc)
             ex.errno = ex.winerror = rc

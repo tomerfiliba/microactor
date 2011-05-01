@@ -86,6 +86,10 @@ def _get_inner_overlapped(ov):
 #===============================================================================
 # InetPton
 #===============================================================================
+#_WSAGetLastError = winsockdll.WSAGetLastError
+#_WSAGetLastError.argstypes = []
+#_WSAGetLastError.restype = ctypes.c_int
+
 _inet_pton = winsockdll.inet_pton
 _inet_pton.argtypes = [
     ctypes.c_int,                   # INT Family
@@ -100,7 +104,12 @@ def inet_pton(family, addrstr):
         addr = ctypes.create_string_buffer(4)
     elif family == socket.AF_INET6:
         addr = ctypes.create_string_buffer(16)
-    if _inet_pton(family, addrstr, ctypes.byref(addr)) != 1:
+    else:
+        raise ValueError("invalid family", family)
+    rc = _inet_pton(family, addrstr, ctypes.byref(addr))
+    if rc == 0:
+        raise ctypes.WinError(11, "invalid address string") # ERROR_BAD_FORMAT
+    elif rc != 1:
         raise ctypes.WinError()
     return addr.raw
 
@@ -120,7 +129,7 @@ def inet_ntop(family, addrbytes):
     """converts raw bytes into IPv4 or IPv6 string"""
     addrstr = ctypes.create_string_buffer(80) # at least 46 bytes for IPv6
     if not _inet_ntop(family, addrbytes, addrstr, ctypes.sizeof(addrstr)):
-        raise ctypes.WinError()
+        raise ctypes.WinError(_WSAGetLastError())
     return addrstr.value
 
 #===============================================================================
@@ -140,7 +149,7 @@ _WSASendTo.argtypes = [
 ] 
 _WSASendTo.restype = ctypes.c_int   # 0 means success
 
-def WSASendTo(hsock, data, sockaddr, overlapped, dwFlags = 0):
+def WSASendTo(hsock, data, sockaddr, overlapped, flags = 0):
     """generic sendto (must pass a populated sockaddr object)"""
     buf = WSABUF(len(data), data)
     if isinstance(hsock, PyHANDLE):
@@ -148,22 +157,32 @@ def WSASendTo(hsock, data, sockaddr, overlapped, dwFlags = 0):
     if isinstance(overlapped, PyOVERLAPPED):
         overlapped = _get_inner_overlapped(overlapped)
     
-    rc = _WSASendTo(hsock, ctypes.byref(buf), 1, 0, dwFlags, 
+    rc = _WSASendTo(hsock, ctypes.byref(buf), 1, 0, flags, 
         ctypes.byref(sockaddr), ctypes.sizeof(sockaddr), ctypes.byref(overlapped), 0)
     if rc != 0 and rc != win32file.WSA_IO_PENDING:
         raise ctypes.WinError()
 
-def WSASendTo4(hsock, data, addr, overlapped, dwFlags = 0):
-    """IPv4 sendto"""
+def WSASendTo4(hsock, data, addr, overlapped, flags = 0):
+    """IPv4 sendto()"""
     host, port = addr
-    sockaddr = SockAddrIP4(port = port, addr = inet_pton(host))
-    return WSASendTo(hsock, data, sockaddr, overlapped, dwFlags)
+    hostaddr = socket.gethostbyname(host)
+    sockaddr = SockAddrIP4(port = port, addr = inet_pton(socket.AF_INET, hostaddr))
+    WSASendTo(hsock, data, sockaddr, overlapped, flags)
 
-def WSASendTo6(hsock, data, addr, overlapped, dwFlags = 0):
-    """IPv6 sendto"""
+def WSASendTo6(hsock, data, addr, overlapped, flags = 0):
+    """IPv6 sendto()"""
     host, port = addr
-    sockaddr = SockAddrIP6(port = port, addr = inet_pton(host))
-    return WSASendTo(hsock, data, sockaddr, overlapped, dwFlags)
+    sockaddr = SockAddrIP6(port = port, addr = inet_pton(socket.AF_INET6, host))
+    WSASendTo(hsock, data, sockaddr, overlapped, flags)
+
+def WSASendToSocket(sockobj, data, addr, overlapped, flags = 0):
+    """sendto() on a socket object (uses the socket's family)""" 
+    if sockobj.family == socket.AF_INET:
+        WSASendTo4(sockobj.fileno(), data, addr, overlapped, flags)
+    elif sockobj.family == socket.AF_INET6:
+        WSASendTo6(sockobj.fileno(), data, addr, overlapped, flags)
+    else:
+        raise socket.error("WSASendTo: only AF_INET and AF_INET6 supported")    
 
 #===============================================================================
 # WSARecvFrom
@@ -182,13 +201,13 @@ _WSARecvFrom.argtypes = [
 ]
 _WSARecvFrom.restype = ctypes.c_int # 0 means success 
 
-def WSARecvFrom(hsock, count, sockaddr, overlapped, dwFlags = 0):
+def WSARecvFrom(hsock, count, sockaddr, overlapped, flags = 0):
     """generic recvfrom (must pass an initialized sockaddr object)"""
 
     data = ctypes.create_string_buffer(count)
     buf = WSABUF(count, data)
     sockaddr_len = ctypes.c_int(ctypes.sizeof(sockaddr))
-    flags = wintypes.DWORD(dwFlags)
+    dw_flags = wintypes.DWORD(flags)
     sentcount = wintypes.DWORD(0)
 
     if isinstance(hsock, PyHANDLE):
@@ -197,44 +216,59 @@ def WSARecvFrom(hsock, count, sockaddr, overlapped, dwFlags = 0):
         overlapped = _get_inner_overlapped(overlapped)
     
     rc = _WSARecvFrom(hsock, ctypes.byref(buf), 1, ctypes.byref(sentcount),
-        ctypes.byref(flags), ctypes.byref(sockaddr), ctypes.byref(sockaddr_len),
+        ctypes.byref(dw_flags), ctypes.byref(sockaddr), ctypes.byref(sockaddr_len),
         ctypes.byref(overlapped), 0)
     error = ctypes.GetLastError()
     if rc != 0 and error != win32file.WSA_IO_PENDING:
         raise ctypes.WinError(error)
-    return data
+    return data, dw_flags
 
-def WSARecvFrom4(hsock, count, overlapped, dwFlags = 0):
-    """IPv4 recvfrom"""
+def WSARecvFrom4(hsock, count, overlapped, flags = 0):
+    """IPv4 recvfrom(). returns (databuf, sockaddr, ptr to flags)"""
     sockaddr = SockAddrIP4()
-    data = WSARecvFrom(hsock, count, sockaddr, overlapped, dwFlags)
-    return data, sockaddr
+    data, p_flags = WSARecvFrom(hsock, count, sockaddr, overlapped, flags)
+    return data, sockaddr, p_flags
 
-def WSARecvFrom6(hsock, count, overlapped, dwFlags = 0):
-    """IPv6 recvfrom"""
+def WSARecvFrom6(hsock, count, overlapped, flags = 0):
+    """IPv6 recvfrom(). returns (databuf, sockaddr, ptr to flags)"""
     sockaddr = SockAddrIP6()
-    data = WSARecvFrom(hsock, count, sockaddr, overlapped, dwFlags)
-    return data, sockaddr
+    data, p_flags = WSARecvFrom(hsock, count, sockaddr, overlapped, flags)
+    return data, sockaddr, p_flags
 
+def WSARecvFromSocket(sockobj, count, overlapped, flags = 0):
+    """recvfrom() on a socket object (uses the socket's family). 
+    returns (databuf, sockaddr, flags)"""
+    if sockobj.family == socket.AF_INET:
+        return WSARecvFrom4(sockobj.fileno(), count, overlapped, flags)
+    elif sockobj.family == socket.AF_INET6:
+        return WSARecvFrom6(sockobj.fileno(), count, overlapped, flags)
+    else:
+        raise socket.error("WSARecvFrom: only AF_INET and AF_INET6 supported")
 
 #===============================================================================
 # Test
 #===============================================================================
 if __name__ == "__main__":
+    
+    print repr(inet_pton(socket.AF_INET, "127.0.0.1"))
+    print repr(inet_pton(socket.AF_INET, "localhost"))
+    exit()
+    
     import threading
     from iocp import IOCP
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.bind(("0.0.0.0", 12345))
+    receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    receiver.bind(("0.0.0.0", 12345))
     
     pyov = win32file.OVERLAPPED()
     port = IOCP()
-    port.register(s.fileno())
-    data, sockaddr = WSARecvFrom4(s.fileno(), 1000, pyov)
+    port.register(receiver.fileno())
+    data, sockaddr, _ = WSARecvFromSocket(receiver, 1000, pyov)
     
     def tfunc():
-        s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        s.sendto("dkfdsfjdsl",("localhost",12345))
+        ov2 = win32file.OVERLAPPED()
+        WSASendToSocket(sender, "dkfdsfjdsl", ("127.0.0.1", 12345), ov2)
     thd = threading.Thread(target = tfunc)
     thd.start()
     
