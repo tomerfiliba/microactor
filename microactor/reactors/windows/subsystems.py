@@ -51,11 +51,13 @@ class IOSubsystem(Subsystem):
     def _init(self):
         self._console_thd = None
         if winconsole.Console.is_attached():
+            print "console attached"
             self.console = winconsole.Console()
             self._console_buffer = ""
             self._console_input_dfr = None
             self._console_thd = threading.Thread(target = self._console_input_thread)
-            self._console_thd.start()
+            self._console_thd.daemon = True
+            self._console_thd_started = False
         else:
             self.console = None
             # check if stdin has FLAG_FILE_FLAG_OVERLAPPED by trying to register 
@@ -64,11 +66,14 @@ class IOSubsystem(Subsystem):
             try:
                 self.reactor._port.register(handle)
             except win32file.error:
+                print "no OVERLAPPED"
                 self._console_buffer = ""
                 self._console_input_dfr = None
                 self._console_thd = threading.Thread(target = self._console_input_thread)
-                self._console_thd.start()
+                self._console_thd.daemon = True
+                self._console_thd_started = False
             else:
+                print "OVERLAPPED enabled"
                 # successfully registered with IOCP -- PipeTransport will work 
                 # just fine
                 pass
@@ -84,7 +89,7 @@ class IOSubsystem(Subsystem):
     @property
     def stdin(self):
         if not self._stdin:
-            if self._console_thd:
+            if getattr(self, "_console_thd", False):
                 self._stdin = ConsoleInputTransport(self.reactor)
             else:
                 # IOCP
@@ -94,7 +99,7 @@ class IOSubsystem(Subsystem):
     @property
     def stdout(self):
         if not self._stdout:
-            if self._console_thd:
+            if getattr(self, "_console_thd", False):
                 self._stdout = BlockingStreamTransport(self, sys.stdout)
             else:
                 self._stdout = PipeTransport(self, sys.stdout, "w")
@@ -103,32 +108,33 @@ class IOSubsystem(Subsystem):
     @property
     def stderr(self):
         if not self._stderr:
-            if self._console_thd:
+            if getattr(self, "_console_thd", False):
                 self._stderr = BlockingStreamTransport(self, sys.stdout)
             else:
                 self._stderr = PipeTransport(self, sys.stderr, "w")
         return self._stderr
     
-    def _fetch_console_input(self):
-        #self._console_events.extend(self.console.get_events())
-        #self._console_buffer += self.console.read(2)
-        self._console_buffer += os.read(sys.stdin.fileno(), 1000)
-        
-        if self._console_input_dfr and not self._console_input_dfr.is_set():
-            self._console_input_dfr.set(self._console_buffer)
-            self._console_buffer = ""
-            self._console_input_dfr = None
+    def _assure_started(self):
+        if getattr(self, "_console_thd", False) and not self._console_thd_started:
+            self._console_thd.start()
+            self._console_thd_started = True
     
     def _request_console_read(self):
+        self._assure_started()
         if not self._console_input_dfr or self._console_input_dfr.is_set():
             self._console_input_dfr = ReactorDeferred(self.reactor)
         return self._console_input_dfr
     
     def _console_input_thread(self):
         while self.reactor._active:
-            #if self.console.wait_input(0.2):
-            self.reactor.call(self._fetch_console_input)
-            self.reactor._wakeup()
+            data = os.read(sys.stdin.fileno(), 1000)
+            self._console_buffer += data
+            
+            if self._console_input_dfr and not self._console_input_dfr.is_set():
+                self._console_input_dfr.set(self._console_buffer)
+                self._console_buffer = ""
+                self._console_input_dfr = None
+                self.reactor._wakeup()
     
     def _wrap_pipe(self, fileobj, mode):
         return PipeTransport(self.reactor, fileobj, mode)
