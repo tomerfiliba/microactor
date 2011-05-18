@@ -88,7 +88,7 @@ class BufferedTransport(StreamTransportAdapter):
             data = yield self.read_all()
             rreturn(data)
         if count > len(self._rbuf):
-            yield self._fill_rbuf(self._read_buffer_size - len(self._rbuf))
+            yield self._fill_rbuf(self._rbufsize - len(self._rbuf))
 
         data = self._rbuf[:count]
         self._rbuf = self._rbuf[count:]
@@ -221,5 +221,54 @@ class BoundTransport(StreamTransportAdapter):
         else:
             yield self.transport.write(data)
             self._wlength -= len(data)
+
+from struct import Struct
+
+class PacketTooLong(Exception):
+    pass
+
+class PacketTransport(object):
+    HEADER = Struct("!L")
+    
+    def __init__(self, transport, max_length = 1024*1024):
+        if isinstance(transport, BufferedTransport):
+            self.transport = transport
+        else:
+            self.transport = BufferedTransport(transport)
+        self.max_length = max_length
+    
+    @reactive
+    def recv(self):
+        header = yield self.transport.read_exactly(self.HEADER.size)
+        length, = self.HEADER.unpack(header)
+        if self.max_length > 0 and length > self.max_length:
+            raise PacketTooLong("packet length is %d, exceeding %d" % (length, self.max_length))
+        data = yield self.transport.read_exactly(length)
+        rreturn(data)
+    
+    def flush(self):
+        return self.transport.flush()
+    
+    @reactive
+    def send(self, data, flush = True):
+        header = self.HEADER.pack(len(data))
+        yield self.transport.write(header)
+        yield self.transport.write(data)
+        if flush:
+            yield self.transport.flush()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
