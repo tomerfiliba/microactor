@@ -4,16 +4,17 @@ from .base import Subsystem
 from microactor.utils import reactive, rreturn
 
 
-class BaseSocketHandler(object):
-    __slots__ = ["reactor", "server", "conn"]
-    def __init__(self, reactor, server, conn):
-        self.reactor = reactor
-        self.server = server
-        self.conn = conn
+class BaseHandler(object):
+    __slots__ = ["reactor", "transport", "owner"]
+    def __init__(self, transport, owner = None):
+        self.reactor = transport.reactor
+        self.transport = transport
+        self.owner = owner
     @reactive
     def close(self):
-        yield self.conn.close()
-        self.server.clients.discard(self)
+        yield self.transport.close()
+        if self.owner:
+            self.owner.clients.discard(self)
     @reactive
     def start(self):
         pass
@@ -32,7 +33,7 @@ class SocketServer(object):
         try:
             while self.active:
                 conn = yield self.listener.accept()
-                handler = self.handler_factory(self.reactor, weakref.proxy(self), conn)
+                handler = self.handler_factory(conn, weakref.proxy(self))
                 self.clients.add(handler)
                 self.reactor.call(handler.start)
         except EnvironmentError:

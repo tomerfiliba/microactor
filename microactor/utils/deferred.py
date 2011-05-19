@@ -10,7 +10,7 @@ class DeferredAlreadySet(Exception):
 
 def format_stack(ignore = 2):
     frames = inspect.stack()[ignore:]
-    return "".join(traceback.format_list((f[1], f[2], f[3], f[4][f[5]]) 
+    return "".join(traceback.format_list((f[1], f[2], f[3], f[4][f[5]])
         for f in reversed(frames)))
 
 class Deferred(object):
@@ -94,7 +94,7 @@ def reactive(func):
                         val = res
                         continue
                 break
-        
+
         retval = Deferred()
         def excepthook(is_exc, val):
             if is_exc and not getattr(val, "_handled", False):
@@ -104,7 +104,7 @@ def reactive(func):
                 print >>sys.stderr, "$$", repr(val)
                 val._handled = True
         retval.register(excepthook)
-        try:        
+        try:
             gen = func(*args, **kwargs)
         except (GeneratorExit, StopIteration):
             retval.set()
@@ -121,7 +121,7 @@ def reactive(func):
             else:
                 retval.set(gen)
         return retval
-    
+
     functools.update_wrapper(wrapper, func)
     return wrapper
 

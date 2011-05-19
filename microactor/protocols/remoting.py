@@ -6,11 +6,14 @@ import weakref
 from microactor.utils import reactive
 from microactor.utils.deferred import ReactorDeferred, rreturn
 from microactor.reactors.transports import TransportClosed
-from microactor.subsystems.net import BaseSocketHandler
 from microactor.utils.transports import PacketTransport
+from microactor.subsystems.net import BaseHandler
 
 
 class BaseService(object):
+    __slots__ = ["reactor"]
+    def __init__(self, reactor):
+        self.reactor = reactor
     @reactive
     def dispatch(self, funcname, args, kwargs):
         func = getattr(self, "exposed_%s" % (funcname,))
@@ -18,20 +21,20 @@ class BaseService(object):
         rreturn(res)
 
 
-class RemotingServer(BaseSocketHandler):
-    def __init__(self, reactor, server, conn, service):
-        BaseSocketHandler.__init__(self, reactor, server, PacketTransport(conn))
-        self.service = service
+class RemotingHandler(BaseHandler):
+    def __init__(self, service_factory, transport, owner = None):
+        BaseHandler.__init__(self, PacketTransport(transport), owner)
+        self.service = service_factory(self.reactor)
     
     @classmethod
-    def of(cls, service):
-        return lambda reactor, server, conn: cls(reactor, server, conn, server)
+    def of(cls, service_factory):
+        return lambda transport, owner = None: cls(service_factory, transport, owner)
     
     @reactive
     def start(self):
         while True:
             try:
-                data = yield self.conn.recv()
+                data = yield self.transport.recv()
             except (EOFError, TransportClosed):
                 break
             self.reactor.call(self.dispatch, data)
@@ -53,7 +56,7 @@ class RemotingServer(BaseSocketHandler):
         else:
             reply = (seq, False, res)
         data = self.pack(reply)
-        yield self.conn.send(data)
+        yield self.transport.send(data)
 
 
 class RemotingNamespace(object):
@@ -64,8 +67,8 @@ class RemotingNamespace(object):
         return lambda *args, **kwargs: self._client.call(name, *args, **kwargs)
 
 class RemotingClient(object):
-    def __init__(self, reactor, transport):
-        self.reactor = reactor
+    def __init__(self, transport):
+        self.reactor = transport.reactor
         self.transport = PacketTransport(transport)
         self.seq = itertools.count()
         self.replies = {}
@@ -75,8 +78,8 @@ class RemotingClient(object):
     @classmethod
     @reactive
     def connect(cls, reactor, host, port):
-        sock = yield reactor.net.connect_tcp(host, port)
-        rreturn(cls(reactor, sock))
+        trns = yield reactor.net.connect_tcp(host, port)
+        rreturn(cls(trns))
 
     @reactive
     def close(self):
@@ -96,6 +99,7 @@ class RemotingClient(object):
                 yield self.close()
                 break
             if seq not in self.replies:
+                print "INVALID SEQ", seq
                 yield self.close()
                 break
             
@@ -107,27 +111,23 @@ class RemotingClient(object):
     
     @reactive
     def call(self, funcname, *args, **kwargs):
+        dfr = yield self._call(funcname, args, kwargs)
+        obj = yield dfr
+        rreturn(obj)
+
+    @reactive
+    def _call(self, funcname, args, kwargs):
         seq = self.seq.next()
         data = self.pack((seq, funcname, args, kwargs))
         yield self.transport.send(data)
         dfr = ReactorDeferred(self.reactor)
         self.replies[seq] = dfr
-        obj = yield dfr
-        rreturn(obj)
+        rreturn(dfr)
 
     def unpack(self, data):
         return pickle.loads(data)
     def pack(self, obj):
         return pickle.dumps(obj)
-
-
-
-
-
-
-
-
-
 
 
 

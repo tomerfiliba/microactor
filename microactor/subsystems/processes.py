@@ -9,10 +9,9 @@ win32iocp = safe_import("microactor.arch.windows.iocp")
 msvcrt = safe_import("msvcrt")
 
 
-#
-# let us praise monkey patching, for it pwnz
-#
-if win32iocp: # sys.platform == "win32"
+if win32iocp:
+    # praise monkey patching, for it pwnz
+    # we want the pipes to have FILE_FLAG_OVERLAPPED, that's all 
     import _subprocess
     _subprocess.CreatePipe = lambda a, b: win32iocp.create_overlapped_pipe()
 
@@ -23,7 +22,16 @@ class ProcessExecutionError(Exception):
         self.rc = rc
         self.stdout = stdout
         self.stderr = stderr
+    
+    @classmethod
+    @reactive
+    def from_proc(cls, msg, proc):
+        stdout = yield proc.stdout.read_all()
+        stderr = yield proc.stderr.read_all()
+        rreturn (cls(msg, proc.returncode, stdout, stderr))
 
+class WorkerProcessTerminated(ProcessExecutionError):
+    pass
 
 class Process(object):
     def __init__(self, reactor, proc, cmdline):
@@ -36,7 +44,7 @@ class Process(object):
         self.pid = proc.pid
         self.wait_dfr = ReactorDeferred(self.reactor)
     def __repr__(self):
-        return "<Process %r: %r (%s)>" % (self.pid, self.cmdline, 
+        return "<Process %r: %r (%s)>" % (self.pid, self.cmdline,
             "alive" if self.is_alive() else "dead")
     def on_termination(self):
         self.wait_dfr.set(self.returncode)
@@ -54,8 +62,71 @@ class Process(object):
         return self.wait_dfr
 
 
+class PooledProcess(object):
+    def __init__(self, proc):
+        self.proc = proc
+        self.reactor = proc.reactor
+        from microactor.protocols.remoting import RemotingClient
+        from microactor.utils.transports import DuplexStreamTransport
+        self.client = RemotingClient(DuplexStreamTransport(self.proc.stdin, self.proc.stdout))
+        self.queue = set()
+    
+    def queue_size(self):
+        return len(self.queue)
+    
+    @reactive
+    def _wait_termination(self):
+        yield self.proc.wait()
+        for dfr in self.queue:
+            if not dfr.is_set():
+                dfr.throw(WorkerProcessTerminated.from_proc(
+                    "worker process has terminated with pending requests", self.proc)) 
+
+    @reactive
+    def enqueue(self, func, args, kwargs):
+        dfr = yield self.client._call(func, args, kwargs)
+        dfr.register(lambda isexc, obj: self.queue.discard(dfr))
+        self.queue.add(dfr)
+        rreturn(dfr)
+    
 class ProcessPool(object):
-    pass
+    def __init__(self, reactor, process_factory, max_processes):
+        self.reactor = reactor
+        self.process_factory = process_factory
+        self.processes = set()
+        self.max_processes = max_processes
+
+    @reactive
+    def _collector(self, proc):
+        yield proc._wait_termination()
+        self.processes.discard(proc)
+    
+    @reactive
+    def _get_process(self):
+        # find an empty worker
+        minimal_proc = None
+        for proc in self.processes:
+            if not proc.queue:
+                rreturn(proc)
+            if minimal_proc is None or minimal_proc.queue_size() > proc.queue_size():
+                minimal_proc = proc
+        
+        # otherwise, see if we can spawn a new worker
+        if len(self.processes) < self.max_processes:
+            proc = yield self.process_factory()
+            proc2 = PooledProcess(proc)
+            self.processes.add(proc2)
+            self.reactor.call(self._collector, proc2)
+            rreturn(proc2)
+        
+        # no, just return the minimal woker
+        rreturn(minimal_proc)
+    
+    @reactive
+    def call(self, func, *args, **kwargs):
+        proc = yield self._get_process()
+        dfr = yield proc.enqueue(func, args, kwargs)
+        rreturn(dfr)
 
 
 class ProcessSubsystem(Subsystem):
@@ -77,7 +148,7 @@ class ProcessSubsystem(Subsystem):
             # every so often
             self.reactor.jobs.schedule_every(self.WINDOWS_POLL_INTERVAL, self._windows_poll_children)
         self._handler_installed = True
-    
+
     def _collect_children(self, signum):
         try:
             while True:
@@ -92,7 +163,7 @@ class ProcessSubsystem(Subsystem):
                 self.reactor.call(proc.on_termination)
         except OSError:
             pass
-    
+
     def _windows_poll_children(self):
         removed = []
         for pid, proc in self.processes.items():
@@ -104,7 +175,7 @@ class ProcessSubsystem(Subsystem):
         if not self.processes:
             self._handler_installed = False
             return False # stop repeating job
-    
+
     @reactive
     def spawn(self, args, cwd = None, env = None, shell = False):
         yield self.reactor.started
@@ -114,12 +185,12 @@ class ProcessSubsystem(Subsystem):
         proc = Process(self.reactor, p, args)
         self.processes[proc.pid] = proc
         rreturn(proc)
-    
+
     @reactive
-    def run(self, args, input = None, retcodes = (0,), cwd = None, env = None, 
+    def run(self, args, input = None, retcodes = (0,), cwd = None, env = None,
             shell = False):
         proc = yield self.spawn(args, cwd, env, shell)
-        
+
         if input:
             @reactive
             def write_all_stdin():
@@ -128,17 +199,21 @@ class ProcessSubsystem(Subsystem):
             self.reactor.call(write_all_stdin)
         else:
             yield proc.stdin.close()
-        
+
         stdout_dfr = proc.stdout.read_all()
         stderr_dfr = proc.stderr.read_all()
         rc = yield proc.wait()
         stdout_data = yield stdout_dfr
         stderr_data = yield stderr_dfr
-        
+
         if retcodes and rc not in retcodes:
             raise ProcessExecutionError("unexpected return code", rc, stdout_data, stderr_data)
         else:
             rreturn((rc, stdout_data, stderr_data))
+    
+    def create_pool(self, args, max_processes, cwd = None, env = None, shell = False):
+        factory = lambda: self.spawn(args, cwd, env, shell)
+        return ProcessPool(self.reactor, factory, max_processes)
 
 
 

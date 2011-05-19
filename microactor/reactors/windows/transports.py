@@ -1,7 +1,7 @@
 import socket
 from microactor.utils import safe_import, ReactorDeferred, reactive, rreturn
 from ..transports import ClosedFile, DetachedFile
-from ..transports import TransportError, OverlappingRequestError 
+from ..transports import TransportError, OverlappingRequestError
 msvcrt = safe_import("msvcrt")
 win32file = safe_import("win32file")
 win32iocp = safe_import("microactor.arch.windows.iocp")
@@ -26,7 +26,7 @@ class BaseTransport(object):
 class StreamTransport(BaseTransport):
     MAX_READ_SIZE = 32000
     MAX_WRITE_SIZE = 32000
-    
+
     __slots__ = ["fileobj", "_ongoing_read", "_ongoing_write"]
     def __init__(self, reactor, fileobj):
         BaseTransport.__init__(self, reactor)
@@ -34,7 +34,7 @@ class StreamTransport(BaseTransport):
         self._register()
         self._ongoing_read = False
         self._ongoing_write = False
-    
+
     def fileno(self):
         return msvcrt.get_osfhandle(self.fileobj.fileno())
     def detach(self):
@@ -50,21 +50,21 @@ class StreamTransport(BaseTransport):
     def _get_read_overlapped(self, callback):
         return self.reactor._get_overlapped(callback)
     _get_write_overlapped = _get_read_overlapped
-    
+
     def read(self, count):
         # XXX:
-        # The ReadFile function may fail with ERROR_INVALID_USER_BUFFER or 
-        # ERROR_NOT_ENOUGH_MEMORY whenever there are too many outstanding 
+        # The ReadFile function may fail with ERROR_INVALID_USER_BUFFER or
+        # ERROR_NOT_ENOUGH_MEMORY whenever there are too many outstanding
         # asynchronous I/O requests.
         #
         # XXX:
-        # http://support.microsoft.com/kb/156932 -- ReadFile may return 
+        # http://support.microsoft.com/kb/156932 -- ReadFile may return
         # immediately, need to check that condition
-        
+
         if self._ongoing_read:
             raise OverlappingRequestError("overlapping reads")
         self._ongoing_read = True
-        
+
         def read_finished(size, exc):
             if size == 0:
                 data = None   # EOF
@@ -75,10 +75,11 @@ class StreamTransport(BaseTransport):
                 dfr.throw(exc)
             else:
                 dfr.set(data)
-        
+
         dfr = ReactorDeferred(self.reactor)
         count = min(count, self.MAX_READ_SIZE)
         if count <= 0:
+            self._ongoing_read = False
             dfr.set("")
             return dfr
         overlapped = self._get_read_overlapped(read_finished)
@@ -89,8 +90,8 @@ class StreamTransport(BaseTransport):
             self.reactor._discard_overlapped(overlapped)
             self._ongoing_read = False
             if isinstance(ex, pywintypes.error) and ex.winerror in win32iocp.IGNORED_ERRORS:
-                # why can't windows be just a little consistent?! 
-                # why can't a set of APIs have the same semantics for all kinds
+                # why can't windows be just a little consistent?!
+                # why can't a set of APIs share the same semantics for all kinds
                 # of handles? grrrrr
                 dfr.set(None)
             else:
@@ -99,20 +100,20 @@ class StreamTransport(BaseTransport):
 
     def write(self, data):
         # XXX:
-        # The WriteFile function may fail with ERROR_INVALID_USER_BUFFER or 
-        # ERROR_NOT_ENOUGH_MEMORY whenever there are too many outstanding 
+        # The WriteFile function may fail with ERROR_INVALID_USER_BUFFER or
+        # ERROR_NOT_ENOUGH_MEMORY whenever there are too many outstanding
         # asynchronous I/O requests.
         #
         # XXX:
-        # http://support.microsoft.com/kb/156932 -- WriteFile may return 
+        # http://support.microsoft.com/kb/156932 -- WriteFile may return
         # immediately, need to check that condition
-        
+
         if self._ongoing_write:
             raise OverlappingRequestError("overlapping writes")
 
         self._ongoing_write = True
         remaining = [data]
-        
+
         def write_finished(size, exc):
             remaining[0] = remaining[0][size:]
             if exc:
@@ -122,7 +123,7 @@ class StreamTransport(BaseTransport):
                 dfr.set()
             else:
                 write_some()
-        
+
         def write_some():
             if not remaining[0]:
                 self._ongoing_write = False
@@ -136,7 +137,7 @@ class StreamTransport(BaseTransport):
                 self._ongoing_write = False
                 self.reactor._discard_overlapped(overlapped)
                 dfr.throw(ex)
-        
+
         dfr = ReactorDeferred(self.reactor)
         write_some()
         return dfr
@@ -147,14 +148,14 @@ class SocketStreamTransport(StreamTransport):
     def __init__(self, reactor, sock):
         StreamTransport.__init__(self, reactor, sock)
         sock.setblocking(False)
-    
+
     def fileno(self):
         return self.fileobj.fileno() # no need to translate with get_osfhandle
     def getsockname(self):
         return self.fileobj.getsockname()
     def getpeername(self):
         return self.fileobj.getpeername()
-    
+
     def close(self):
         try:
             self.shutdown()
@@ -229,7 +230,7 @@ class FileTransport(PipeTransport):
 
     def _get_write_overlapped(self, callback):
         ov = self.reactor._get_overlapped(callback)
-        # To write to the end of file, specify both the Offset and OffsetHigh 
+        # To write to the end of file, specify both the Offset and OffsetHigh
         # members of the OVERLAPPED structure as 0xFFFFFFFF
         ov.Offset = 0xFFFFFFFF
         ov.OffsetHigh = 0xFFFFFFFF
@@ -270,7 +271,7 @@ class ListeningSocketTransport(BaseSocketTransport):
 
     def getsockname(self):
         return self.sock.getsockname()
-    
+
     def accept(self):
         def accept_finished(size, exc):
             if exc:
@@ -278,7 +279,7 @@ class ListeningSocketTransport(BaseSocketTransport):
                 dfr.throw(exc)
             else:
                 dfr.set(trns)
-        
+
         dfr = ReactorDeferred(self.reactor)
         overlapped = self.reactor._get_overlapped(accept_finished)
         try:
@@ -302,7 +303,7 @@ class DatagramSocketTransport(BaseSocketTransport):
         BaseSocketTransport.__init__(self, reactor, sock)
         self._ongoing_read = False
         self._ongoing_write = False
-    
+
     def getsockname(self):
         return self.sock.getsockname()
 
@@ -312,14 +313,14 @@ class DatagramSocketTransport(BaseSocketTransport):
         if self._ongoing_write:
             raise OverlappingRequestError("overlapping sendto")
         self._ongoing_write = True
-        
+
         def write_finished(size, exc):
             self._ongoing_write = False
             if exc:
                 dfr.throw(exc)
             else:
                 dfr.set(size) # return actual sent size
-        
+
         dfr = ReactorDeferred(self.reactor)
         overlapped = self.reactor._get_overlapped(write_finished)
         try:
@@ -329,14 +330,14 @@ class DatagramSocketTransport(BaseSocketTransport):
             self.reactor._discard_overlapped(overlapped)
             dfr.throw(ex)
         return dfr
-    
+
     def recvfrom(self, count = -1):
         if count < 0 or count > self.MAX_DATAGRAM_SIZE:
             count = self.MAX_DATAGRAM_SIZE
         if self._ongoing_read:
             raise OverlappingRequestError("overlapping recvfrom")
         self._ongoing_read = True
-        
+
         def read_finished(size, exc):
             self._ongoing_read = False
             if exc:
@@ -345,7 +346,7 @@ class DatagramSocketTransport(BaseSocketTransport):
                 data = buf[:size]
                 addrinfo = (sockaddr.addr_str, sockaddr.port)
                 dfr.set((data, addrinfo))
-        
+
         dfr = ReactorDeferred(self.reactor)
         overlapped = self.reactor._get_overlapped(read_finished)
         try:

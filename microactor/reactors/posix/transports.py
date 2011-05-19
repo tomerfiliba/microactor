@@ -4,7 +4,7 @@ import errno
 import socket
 from microactor.utils import ReactorDeferred, reactive, rreturn, safe_import
 from ..transports import ClosedFile, DetachedFile
-from ..transports import TransportError, ReadRequiresMoreData, OverlappingRequestError 
+from ..transports import TransportError, ReadRequiresMoreData, OverlappingRequestError
 fcntl = safe_import("fcntl")
 ssl = safe_import("ssl")
 
@@ -25,7 +25,7 @@ class BaseTransport(object):
     def _unregister(self):
         self.reactor.unregister_read(self)
         self.reactor.unregister_write(self)
-    
+
     def on_read(self):
         pass
     def on_write(self):
@@ -61,7 +61,7 @@ class WakeupTransport(BaseTransport):
     def on_read(self):
         if self.auto_reset:
             self.reset()
-    
+
     def set(self):
         if self._set:
             return
@@ -78,7 +78,7 @@ class StreamTransport(BaseTransport):
     __slots__ = ["fileobj", "_read_req", "_write_req", "_eof"]
     MAX_READ_SIZE = 16300
     MAX_WRITE_SIZE = 16300
-    
+
     def __init__(self, reactor, fileobj):
         self.fileobj = fileobj
         self._read_req = None
@@ -110,7 +110,7 @@ class StreamTransport(BaseTransport):
             self._read_req = (dfr, count)
             self.reactor.register_read(self)
         return dfr
-    
+
     def write(self, data):
         if self._write_req:
             raise OverlappingRequestError("overlapping writes")
@@ -118,12 +118,12 @@ class StreamTransport(BaseTransport):
         self._write_req = (dfr, data)
         self.reactor.register_write(self)
         return dfr
-    
+
     def on_read(self):
         if not self._read_req:
             self.reactor.unregister_read(self)
             return
-        
+
         dfr, count = self._read_req
         try:
             data = self._do_read(min(self.MAX_READ_SIZE, count))
@@ -144,7 +144,7 @@ class StreamTransport(BaseTransport):
         if not self._write_req:
             self.reactor.unregister_write(self)
             return
-        
+
         dfr, data = self._write_req
         try:
             if data:
@@ -164,7 +164,7 @@ class StreamTransport(BaseTransport):
             dfr.set()
             self.reactor.unregister_write(self)
             self._write_req = None
-    
+
     def _do_read(self, count):
         return self.fileobj.read(count)
     def _do_write(self, data):
@@ -207,14 +207,14 @@ class PipeTransport(StreamTransport):
             self._flush_dfr = ReactorDeferred(self.reactor)
             self.reactor.register_write(self)
         return self._flush_dfr
-    
+
     def _flush(self):
         self.fileobj.flush()
         os.fsync(self.fileno())
         if self._flush_dfr:
             self._flush_dfr.set()
             self._flush_dfr = None
-    
+
     def on_write(self):
         StreamTransport.on_write(self)
         if self.auto_flush or self._flush_dfr:
@@ -234,16 +234,16 @@ class FileTransport(PipeTransport):
 #===============================================================================
 class SocketStreamTransport(StreamTransport):
     __slots__ = []
-    
+
     def __init__(self, reactor, sock):
         StreamTransport.__init__(self, reactor, sock)
         sock.setblocking(False)
-    
+
     def getsockname(self):
         return self.fileno.getsockname()
     def getpeername(self):
         return self.fileobj.getpeername()
-    
+
     def shutdown(self, mode = "rw"):
         if mode == "r":
             flags = socket.SHUT_RD
@@ -257,14 +257,14 @@ class SocketStreamTransport(StreamTransport):
         else:
             raise ValueError("invalid mode: %r" % (mode,))
         self.fileobj.shutdown(flags)
-    
+
     def close(self):
         try:
             self.shutdown()
         except Exception:
             pass
         StreamTransport.close(self)
-    
+
     def _do_read(self, count):
         try:
             return self.fileobj.recv(count)
@@ -273,7 +273,7 @@ class SocketStreamTransport(StreamTransport):
                 return ""  # EOF
             else:
                 raise
-    
+
     def _do_write(self, data):
         try:
             return self.fileobj.send(data)
@@ -332,7 +332,7 @@ class ConnectingSocketTransport(BaseSocketTransport):
         self.addr = addr
         self.connected_dfr = ReactorDeferred(self.reactor)
         self._connecting = False
-    
+
     def connect(self, timeout = None):
         if self._connecting:
             raise OverlappingRequestError("already connecting")
@@ -342,10 +342,10 @@ class ConnectingSocketTransport(BaseSocketTransport):
         self.reactor.register_write(self)
         self._attempt_connect()
         return self.connected_dfr
-    
+
     def on_write(self):
         self._attempt_connect()
-    
+
     def _attempt_connect(self):
         if self.connected_dfr.is_set():
             self.detach()
@@ -362,7 +362,7 @@ class ConnectingSocketTransport(BaseSocketTransport):
             self.connected_dfr.set(SocketStreamTransport(self.reactor, sock))
         else:
             self.connected_dfr.throw(socket.error(err, errno.errorcode[err]))
-    
+
     def _cancel(self):
         if self.connected_dfr.is_set():
             return
@@ -392,7 +392,7 @@ class DatagramSocketTransport(BaseSocketTransport):
         self._read_req = (dfr, count)
         self.reactor.register_read(self)
         return dfr
-        
+
     def sendto(self, addr, data):
         if len(data) > self.MAX_DATAGRAM_SIZE:
             raise TransportError("data too long")
@@ -402,12 +402,12 @@ class DatagramSocketTransport(BaseSocketTransport):
         self._write_req = (dfr, addr, data)
         self.reactor.register_write(self)
         return dfr
-    
+
     def on_read(self):
         if not self._read_req:
             self.reactor.unregister_read(self)
             return
-        
+
         dfr, count = self._read_req
         self.reactor.unregister_read(self)
         self._read_req = None
@@ -439,10 +439,10 @@ class DatagramSocketTransport(BaseSocketTransport):
 #===============================================================================
 class SslStreamTransport(SocketStreamTransport):
     __slots__ = []
-    
+
     def getpeercert(self, binary_form = False):
         return self.fileobj.getpeercert(binary_form)
-    
+
     def unwrap(self):
         s = self.fileobj.unwrap()
         self.detach()
@@ -471,12 +471,12 @@ class SslHandshakingTransport(BaseSocketTransport):
     def __init__(self, reactor, sslsock):
         BaseSocketTransport.__init__(self, reactor, sslsock)
         self.connected_dfr = ReactorDeferred(self.reactor)
-    
+
     def handshake(self):
         if not self.connected_dfr.is_set():
             self._handshake()
         return self.connected_dfr
-    
+
     def _handshake(self):
         try:
             self.sock.do_handshake()
@@ -492,11 +492,11 @@ class SslHandshakingTransport(BaseSocketTransport):
             self.detach()
             trns = SslStreamTransport(self.reactor, sock)
             self.connected_dfr.set(trns)
-    
+
     def on_read(self):
         self.reactor.unregister_read(self)
         self._handshake()
-    
+
     def on_write(self):
         self.reactor.unregister_write(self)
         self._handshake()
@@ -506,7 +506,7 @@ class SslListeninglSocketTransport(ListeningSocketTransport):
     __slots__ = []
     def __init__(self, reactor, sock):
         ListeningSocketTransport.__init__(self, reactor, sock, SslHandshakingTransport)
-    
+
     @reactive
     def accept(self):
         handshaking_trns = yield ListeningSocketTransport.accept()

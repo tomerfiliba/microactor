@@ -231,6 +231,7 @@ class PacketTransport(object):
     HEADER = Struct("!L")
     
     def __init__(self, transport, max_length = 1024*1024):
+        self.reactor = transport.reactor
         if isinstance(transport, BufferedTransport):
             self.transport = transport
         else:
@@ -259,9 +260,24 @@ class PacketTransport(object):
         if flush:
             yield self.transport.flush()
 
-
-
-
+class DuplexStreamTransport(object):
+    def __init__(self, in_transport, out_transport):
+        self.reactor = in_transport.reactor
+        self.in_transport = in_transport
+        self.out_transport = out_transport
+    
+    @reactive
+    def close(self):
+        yield self.in_transport.close()
+        yield self.out_transport.close()
+    def detach(self):
+        self.in_transport.detach()
+        self.out_transport.detach()
+        
+    def write(self, data):
+        return self.out_transport.write(data)
+    def read(self, count):
+        return self.in_transport.read(count)
 
 
 
