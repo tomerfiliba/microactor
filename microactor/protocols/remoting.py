@@ -80,21 +80,25 @@ class RemotingClient(object):
 
     @reactive
     def close(self):
-        self.transport.close()
+        yield self.transport.close()
     
     @reactive
     def _process_incoming(self):
         while True:
             try:
-                data = self.transport.recv()
+                data = yield self.transport.recv()
             except (EOFError, TransportClosed):
                 break
             try:
                 seq, isexc, obj = self.unpack(data)
-            except (TypeError, ValueError):
-                continue
+            except (TypeError, ValueError) as ex:
+                print "PROTOCOL ERROR", ex
+                yield self.close()
+                break
             if seq not in self.replies:
-                continue
+                yield self.close()
+                break
+            
             dfr = self.replies.pop(seq)
             if isexc:
                 dfr.throw(obj)
@@ -104,7 +108,7 @@ class RemotingClient(object):
     @reactive
     def call(self, funcname, *args, **kwargs):
         seq = self.seq.next()
-        data = self.pack(seq, funcname, args, kwargs)
+        data = self.pack((seq, funcname, args, kwargs))
         yield self.transport.send(data)
         dfr = ReactorDeferred(self.reactor)
         self.replies[seq] = dfr

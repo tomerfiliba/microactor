@@ -7,7 +7,7 @@ from .transports import (SocketStreamTransport, ListeningSocketTransport,
     PipeTransport, FileTransport, ConsoleInputTransport, BlockingStreamTransport)
 import threading
 import sys
-import msvcrt
+msvcrt = safe_import("msvcrt") 
 win32file = safe_import("win32file")
 win32iocp = safe_import("microactor.arch.windows.iocp")
 winconsole = safe_import("microactor.arch.windows.console") 

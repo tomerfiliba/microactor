@@ -56,6 +56,8 @@ class BaseReactor(object):
         try:
             while self._active:
                 self._work()
+        except KeyboardInterrupt:
+            pass
         finally:
             self._active = False
     
@@ -108,8 +110,18 @@ class BaseReactor(object):
         self._callbacks.append((func, args, kwargs))
     def call_at(self, ts, func, *args, **kwargs):
         self._jobs.push((ts, func, args, kwargs))
-
-
-
     
+    
+
+
+
+
+
+
+
+
+
+
+
+
 

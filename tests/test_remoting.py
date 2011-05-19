@@ -15,9 +15,10 @@ def main(reactor):
     reactor.jobs.schedule(10, reactor.stop)
     server = yield reactor.net.serve(RemotingServer.of(MyService), 18822)
     client = yield RemotingClient.connect(reactor, "localhost", 18822)
-    #res = yield client.call("add", 33, 22)
-    #print "res is", res
-    
+    print client
+    res = yield client.call("add", 33, 22)
+    print "res is", res
+
 
 if __name__ == "__main__":
     reactor = microactor.get_reactor()

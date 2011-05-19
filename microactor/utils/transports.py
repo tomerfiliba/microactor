@@ -237,6 +237,11 @@ class PacketTransport(object):
             self.transport = BufferedTransport(transport)
         self.max_length = max_length
     
+    def close(self):
+        return self.transport.close()
+    def flush(self):
+        return self.transport.flush()
+    
     @reactive
     def recv(self):
         header = yield self.transport.read_exactly(self.HEADER.size)
@@ -245,9 +250,6 @@ class PacketTransport(object):
             raise PacketTooLong("packet length is %d, exceeding %d" % (length, self.max_length))
         data = yield self.transport.read_exactly(length)
         rreturn(data)
-    
-    def flush(self):
-        return self.transport.flush()
     
     @reactive
     def send(self, data, flush = True):

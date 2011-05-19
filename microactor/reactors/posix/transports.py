@@ -128,7 +128,8 @@ class StreamTransport(BaseTransport):
         try:
             data = self._do_read(min(self.MAX_READ_SIZE, count))
         except ReadRequiresMoreData:
-            return # don't unregister_read and don't remove _read_req
+            # don't unregister_read and don't remove _read_req
+            return
         except Exception as ex:
             dfr.throw(ex)
         else:
@@ -148,6 +149,8 @@ class StreamTransport(BaseTransport):
         try:
             if data:
                 count = self._do_write(data[:self.MAX_WRITE_SIZE])
+            else:
+                count = 0
         except Exception as ex:
             data = None
             dfr.throw(ex)
