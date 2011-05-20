@@ -49,69 +49,68 @@ class IOSubsystem(Subsystem):
     NAME = "io"
     
     def _init(self):
-        self._console_thd = None
-        if winconsole.Console.is_attached():
-            print "console attached"
-            self.console = winconsole.Console()
-            self._console_buffer = ""
-            self._console_input_dfr = None
-            self._console_thd = threading.Thread(target = self._console_input_thread)
-            self._console_thd.daemon = True
-            self._console_thd_started = False
-        else:
-            self.console = None
-            # check if stdin has FLAG_FILE_FLAG_OVERLAPPED by trying to register 
-            # it with the IOCP
-            handle = msvcrt.get_osfhandle(sys.stdin.fileno())
-            try:
-                self.reactor._port.register(handle)
-            except win32file.error:
-                print "no OVERLAPPED"
-                self._console_buffer = ""
-                self._console_input_dfr = None
-                self._console_thd = threading.Thread(target = self._console_input_thread)
-                self._console_thd.daemon = True
-                self._console_thd_started = False
-            else:
-                print "OVERLAPPED enabled"
-                # successfully registered with IOCP -- PipeTransport will work 
-                # just fine
-                pass
+#        self._console_thd = None
+#        if winconsole.Console.is_attached():
+#            print "console attached"
+#            self.console = winconsole.Console()
+#            self._console_buffer = ""
+#            self._console_input_dfr = None
+#            self._console_thd = threading.Thread(target = self._console_input_thread)
+#            self._console_thd.daemon = True
+#            self._console_thd_started = False
+#        else:
+#            self.console = None
+#            # check if stdin has FLAG_FILE_FLAG_OVERLAPPED by trying to register 
+#            # it with the IOCP
+#            handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+#            try:
+#                self.reactor._port.register(handle)
+#            except win32file.error:
+#                print "no OVERLAPPED"
+#                self._console_buffer = ""
+#                self._console_input_dfr = None
+#                self._console_thd = threading.Thread(target = self._console_input_thread)
+#                self._console_thd.daemon = True
+#                self._console_thd_started = False
+#            else:
+#                print "OVERLAPPED enabled"
+#                # successfully registered with IOCP -- PipeTransport will work 
+#                # just fine
+#                pass
         self._stdin = None
         self._stdout = None
         self._stderr = None
     
-    def _unload(self):
-        if self.console:
-            self.console.close()
-            self.console = None
+    #def _unload(self):
+    #    if self.console:
+    #        self.console.close()
+    #        self.console = None
     
     @property
     def stdin(self):
         if not self._stdin:
-            if getattr(self, "_console_thd", False):
-                self._stdin = ConsoleInputTransport(self.reactor)
-            else:
-                # IOCP
-                self._stdin = PipeTransport(self, sys.stdin, "r")
+            #if getattr(self, "_console_thd", False):
+            #    self._stdin = ConsoleInputTransport(self.reactor)
+            #else:
+            self._stdin = PipeTransport(self.reactor, sys.stdin, "r")
         return self._stdin
     
     @property
     def stdout(self):
         if not self._stdout:
-            if getattr(self, "_console_thd", False):
-                self._stdout = BlockingStreamTransport(self, sys.stdout)
-            else:
-                self._stdout = PipeTransport(self, sys.stdout, "w")
+            #if getattr(self, "_console_thd", False):
+            #    self._stdout = BlockingStreamTransport(self, sys.stdout)
+            #else:
+            self._stdout = PipeTransport(self.reactor, sys.stdout, "w")
         return self._stdout
     
     @property
     def stderr(self):
         if not self._stderr:
-            if getattr(self, "_console_thd", False):
-                self._stderr = BlockingStreamTransport(self, sys.stdout)
-            else:
-                self._stderr = PipeTransport(self, sys.stderr, "w")
+            #if getattr(self, "_console_thd", False):
+            #    self._stderr = BlockingStreamTransport(self, sys.stdout)
+            #else:
+            self._stderr = PipeTransport(self.reactor, sys.stderr, "w")
         return self._stderr
     
     def _assure_started(self):

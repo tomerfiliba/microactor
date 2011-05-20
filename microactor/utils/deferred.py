@@ -10,8 +10,10 @@ class DeferredAlreadySet(Exception):
 
 def format_stack(ignore = 2):
     frames = inspect.stack()[ignore:]
-    return "".join(traceback.format_list((f[1], f[2], f[3], f[4][f[5]])
-        for f in reversed(frames)))
+    lines = traceback.format_list((f[1], f[2], f[3], f[4][f[5]])
+        for f in reversed(frames))
+    return "".join(l for l in lines 
+        if not ("microactor" in l and "utils" in l and "deferred" in l))
 
 class Deferred(object):
     __slots__ = ["value", "_callbacks", "canceled", "tracebacks"]
@@ -24,6 +26,8 @@ class Deferred(object):
         self.canceled = False
         self.tracebacks = [format_stack()]
     def register(self, func):
+        #if not hasattr(self, "_callbacks") or self._callbacks:
+        #    print "!!", self, "more than one callback"
         if self.canceled:
             return
         elif self.is_set():

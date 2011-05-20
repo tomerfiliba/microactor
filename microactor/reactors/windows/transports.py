@@ -10,9 +10,10 @@ pywintypes = safe_import("pywintypes")
 
 
 class BaseTransport(object):
-    __slots__ = ["reactor"]
+    __slots__ = ["reactor", "properties"]
     def __init__(self, reactor):
         self.reactor = reactor
+        self.properties = {}
     def _register(self):
         self.reactor.register_transport(self)
     def detach(self):
@@ -34,6 +35,8 @@ class StreamTransport(BaseTransport):
         self._register()
         self._ongoing_read = False
         self._ongoing_write = False
+        self.properties["writable"] = True
+        self.properties["readable"] = True
 
     def fileno(self):
         return msvcrt.get_osfhandle(self.fileobj.fileno())
@@ -185,9 +188,11 @@ class PipeTransport(StreamTransport):
         StreamTransport.__init__(self, reactor, fileobj)
         if "r" not in self.mode:
             self.read = self._wrong_mode
+            self.properties.pop("readable", None)
         if "w" not in self.mode:
             self.write = self._wrong_mode
             self.flush = self._wrong_mode
+            self.properties.pop("writable", None)
 
     def fileno(self):
         if hasattr(self.fileobj, "handle"):
@@ -303,6 +308,8 @@ class DatagramSocketTransport(BaseSocketTransport):
         BaseSocketTransport.__init__(self, reactor, sock)
         self._ongoing_read = False
         self._ongoing_write = False
+        self.properties["readable"] = True
+        self.properties["writable"] = True
 
     def getsockname(self):
         return self.sock.getsockname()

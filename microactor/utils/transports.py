@@ -1,5 +1,6 @@
 import sys
 import codecs
+from struct import Struct
 from .deferred import reactive, rreturn
 from microactor.reactors.transports import TransportClosed
 
@@ -10,6 +11,7 @@ class StreamTransportAdapter(object):
     def __init__(self, transport):
         self.reactor = transport.reactor
         self.transport = transport
+        self.properties = dict(self.transport.properties)
     
     def close(self):
         return self.transport.close()
@@ -61,10 +63,12 @@ class BufferedTransport(StreamTransportAdapter):
         self._wbufsize = write_buffer_size
         self._rbuf = ""
         self._wbuf = ""
+        self.properties["buffered"] = True
 
     @reactive
     def close(self):
-        yield self.flush()
+        if "writable" in self.properties:
+            yield self.flush()
         yield self.transport.close()
 
     @reactive
@@ -222,7 +226,6 @@ class BoundTransport(StreamTransportAdapter):
             yield self.transport.write(data)
             self._wlength -= len(data)
 
-from struct import Struct
 
 class PacketTooLong(Exception):
     pass
@@ -232,10 +235,12 @@ class PacketTransport(object):
     
     def __init__(self, transport, max_length = 1024*1024):
         self.reactor = transport.reactor
-        if isinstance(transport, BufferedTransport):
-            self.transport = transport
-        else:
-            self.transport = BufferedTransport(transport)
+        #if "buffered" not in transport.properties:
+        #    transport = BufferedTransport(transport)
+        if not isinstance(transport, BufferedTransport):
+            transport = BufferedTransport(transport)
+        self.properties = dict(transport.properties)
+        self.transport = transport
         self.max_length = max_length
     
     def close(self):
@@ -263,8 +268,11 @@ class PacketTransport(object):
 class DuplexStreamTransport(object):
     def __init__(self, in_transport, out_transport):
         self.reactor = in_transport.reactor
+        self.properties = {"readable" : True, "writable" : True}
         self.in_transport = in_transport
         self.out_transport = out_transport
+        if "buffered" in self.in_transport.properties and "buffered" in self.out_transport.properties:
+            self.properties["buffered"] = True
     
     @reactive
     def close(self):
@@ -273,7 +281,9 @@ class DuplexStreamTransport(object):
     def detach(self):
         self.in_transport.detach()
         self.out_transport.detach()
-        
+    
+    def flush(self):
+        self.out_transport.flush()
     def write(self, data):
         return self.out_transport.write(data)
     def read(self, count):

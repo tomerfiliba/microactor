@@ -13,9 +13,10 @@ ssl = safe_import("ssl")
 # Base
 #===============================================================================
 class BaseTransport(object):
-    __slots__ = ["reactor"]
+    __slots__ = ["reactor", "properties"]
     def __init__(self, reactor):
         self.reactor = reactor
+        self.properties = {}
     def fileno(self):
         raise NotImplementedError()
     def close(self):
@@ -85,6 +86,8 @@ class StreamTransport(BaseTransport):
         self._write_req = None
         self._eof = False
         BaseTransport.__init__(self, reactor)
+        self.properties["writable"] = True
+        self.properties["readable"] = True
 
     def fileno(self):
         return self.fileobj.fileno()
@@ -186,9 +189,11 @@ class PipeTransport(StreamTransport):
         self.auto_flush = auto_flush
         if "r" not in mode:
             self.read = self._wrong_mode
+            self.properties.pop("readable", None)
         if "w" not in mode:
             self.flush = self._wrong_mode
             self.write = self._wrong_mode
+            self.properties.pop("writable", None)
         if fcntl:
             self._unblock(self.fileno())
 
@@ -381,6 +386,8 @@ class DatagramSocketTransport(BaseSocketTransport):
         BaseSocketTransport.__init__(self, reactor, sock)
         self._read_req = None
         self._write_req = None
+        self.properties["readable"] = True
+        self.properties["writable"] = True
 
     def getsockname(self):
         return self.sock.getsockname()

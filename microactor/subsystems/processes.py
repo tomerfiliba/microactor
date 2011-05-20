@@ -1,10 +1,11 @@
-import sys
 import os
 import signal
 import subprocess
 from .base import Subsystem
 from microactor.utils import ReactorDeferred, reactive, rreturn
 from microactor.utils import BufferedTransport, safe_import
+from microactor.protocols.remoting import RemotingClient
+from microactor.utils.transports import DuplexStreamTransport
 win32iocp = safe_import("microactor.arch.windows.iocp")
 msvcrt = safe_import("msvcrt")
 
@@ -66,10 +67,20 @@ class PooledProcess(object):
     def __init__(self, proc):
         self.proc = proc
         self.reactor = proc.reactor
-        from microactor.protocols.remoting import RemotingClient
-        from microactor.utils.transports import DuplexStreamTransport
-        self.client = RemotingClient(DuplexStreamTransport(self.proc.stdin, self.proc.stdout))
+        self.client = RemotingClient(DuplexStreamTransport(self.proc.stdout, self.proc.stdin))
         self.queue = set()
+    
+    @reactive
+    def close(self):
+        self.queue.clear()
+        self.client.close()  # will close the proc's stdin and stdout
+        if not win32iocp:
+            # can't send SIGINT on windows... let's hope the process will 
+            # notice that it's stdin has been closed
+            self.proc.signal(signal.SIGINT)
+        yield self.reactor.jobs.sleep(0.3)
+        if self.proc.is_alive():
+            self.proc.terminate()
     
     def queue_size(self):
         return len(self.queue)
@@ -79,8 +90,9 @@ class PooledProcess(object):
         yield self.proc.wait()
         for dfr in self.queue:
             if not dfr.is_set():
-                dfr.throw(WorkerProcessTerminated.from_proc(
-                    "worker process has terminated with pending requests", self.proc)) 
+                exc = yield WorkerProcessTerminated.from_proc(
+                    "worker process has terminated with pending requests", self.proc)
+                dfr.throw(exc) 
 
     @reactive
     def enqueue(self, func, args, kwargs):
@@ -95,6 +107,12 @@ class ProcessPool(object):
         self.process_factory = process_factory
         self.processes = set()
         self.max_processes = max_processes
+
+    @reactive
+    def close(self):
+        dfrlist = [proc.close() for proc in self.processes]
+        for dfr in dfrlist:
+            yield dfr
 
     @reactive
     def _collector(self, proc):
@@ -123,10 +141,16 @@ class ProcessPool(object):
         rreturn(minimal_proc)
     
     @reactive
-    def call(self, func, *args, **kwargs):
+    def _call(self, func, args, kwargs):
         proc = yield self._get_process()
         dfr = yield proc.enqueue(func, args, kwargs)
         rreturn(dfr)
+
+    @reactive
+    def call(self, func, *args, **kwargs):
+        dfr = yield self._call(func, args, kwargs)
+        res = yield dfr
+        rreturn(res)
 
 
 class ProcessSubsystem(Subsystem):

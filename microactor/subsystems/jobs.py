@@ -1,7 +1,7 @@
 import time
-from .base import Subsystem
-from microactor.utils import ReactorDeferred
 import functools
+from .base import Subsystem
+from microactor.utils import ReactorDeferred, reactive, rreturn
 
 
 class JobSubsystem(Subsystem):
@@ -43,5 +43,12 @@ class JobSubsystem(Subsystem):
         self.reactor.call_at(t0, wrapper)
         return dfr
 
+    @reactive
+    def joined(self, dfrlist):
+        reslist = []
+        for dfr in dfrlist:
+            res = yield dfr
+            reslist.append(res)
+        rreturn(reslist)
 
 
